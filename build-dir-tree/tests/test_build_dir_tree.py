@@ -522,6 +522,64 @@ class TestScanAndDialogs(unittest.TestCase):
         self.assertIn("file", proc.stdout)
 
 
+class TestLauncherShims(unittest.TestCase):
+    """WDAC blocks pip's .exe stubs, so launchers are .cmd files."""
+
+    def test_shim_dir_is_the_scripts_folder(self):
+        from build_dir_tree.shims import shim_dir
+
+        path = shim_dir()
+        self.assertTrue(os.path.isdir(path))
+        if os.name == "nt":
+            self.assertEqual(os.path.basename(path).lower(), "scripts")
+
+    def test_shims_are_written_and_run(self):
+        import subprocess
+        import tempfile
+
+        from build_dir_tree.shims import SHIMS, install_shims
+
+        with tempfile.TemporaryDirectory() as tmp:
+            written = install_shims(tmp, force=True)
+            self.assertEqual(len(written), len(SHIMS))
+
+            cli = os.path.join(tmp, "build-dir-tree.cmd")
+            self.assertTrue(os.path.isfile(cli))
+            with open(cli, encoding="utf-8") as fh:
+                body = fh.read()
+            self.assertIn("-m build_dir_tree", body)
+            # must call python.exe -m ..., never a build-dir-tree*.exe launcher
+            self.assertNotIn("build-dir-tree.exe", body.lower())
+            self.assertNotIn("build-dir-tree-ui.exe", body.lower())
+
+            if os.name == "nt":
+                proc = subprocess.run(
+                    [os.environ.get("COMSPEC", "cmd.exe"), "/c", cli, "--version"],
+                    capture_output=True, text=True, timeout=120,
+                )
+                self.assertEqual(proc.returncode, 0, proc.stderr)
+                self.assertIn("build-dir-tree", proc.stdout)
+
+    def test_install_is_idempotent(self):
+        import tempfile
+
+        from build_dir_tree.shims import install_shims
+
+        with tempfile.TemporaryDirectory() as tmp:
+            first = install_shims(tmp, force=True)
+            second = install_shims(tmp, force=False)
+            self.assertTrue(first)
+            self.assertEqual(second, [])  # already present, not rewritten
+
+    def test_pyproject_declares_no_console_scripts(self):
+        """A [project.scripts] section would reintroduce blocked .exe stubs."""
+        with open(os.path.join(ROOT, "pyproject.toml"), encoding="utf-8") as fh:
+            text = fh.read()
+        active = [line for line in text.splitlines()
+                  if line.strip() == "[project.scripts]"]
+        self.assertEqual(active, [])
+
+
 class TestLocations(unittest.TestCase):
     """Default output directory: cwd when sensible, else Documents/LMC."""
 

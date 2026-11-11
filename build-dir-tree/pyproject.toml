@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "build-dir-tree"
-version = "1.5.0"
+version = "1.6.0"
 description = "Rebuild a course directory tree from a saved LMC/Moodle page snapshot"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -18,9 +18,19 @@ classifiers = [
     "Topic :: Utilities",
 ]
 
-[project.scripts]
-build-dir-tree = "build_dir_tree.cli:main"
-build-dir-tree-ui = "build_dir_tree.web.server:main"
+# No [project.scripts] on purpose.
+#
+# pip turns console scripts into .exe stubs inside Scripts\, and on machines
+# running Windows Defender Application Control (WDAC) those stubs are not on the
+# allow list, so every invocation is blocked outright. .cmd shims are unaffected
+# because the policy only governs PE executables.
+#
+# Install the shims once with:
+#     python -m build_dir_tree.shims
+#
+# Until then use:
+#     python -m build_dir_tree ...          CLI
+#     python -m build_dir_tree.ui           graphical interface
 
 [tool.setuptools]
 packages = ["build_dir_tree", "build_dir_tree.web"]

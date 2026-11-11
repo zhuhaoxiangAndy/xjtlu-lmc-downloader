@@ -54,7 +54,8 @@ python -m pip install .
 
 ```bash
 cd xjtlu-lmc-downloader/build-dir-tree
-python -m pip install -e .
+python -m pip install .
+python -m build_dir_tree.shims      # 安装 .cmd 启动器，避开应用控制策略
 ```
 
 装完后在**任何目录**都能用：
@@ -91,6 +92,46 @@ python -m venv .venv
 .venv\Scripts\activate        # Windows
 python -m pip install -e .
 ```
+
+### 启动器被设备防护拦截时
+
+如果你的电脑启用了 Windows Defender Application Control（WDAC，应用控制策略），
+pip 生成的 `Scripts\build-dir-tree.exe` 会被直接拦截：
+
+```
+was blocked by your organization's Device Guard policy
+```
+
+这是策略层面禁止运行该可执行文件，改权限或加白名单都不归工具管。
+本工具因此**不使用 exe 启动器**，改为安装 `.cmd` 批处理入口 —— 
+应用控制策略只管可执行文件，不管批处理。
+
+安装一次即可：
+
+```bash
+python -m build_dir_tree.shims
+```
+
+它会在 Python 的 `Scripts` 目录写入两个文件：
+
+```
+build-dir-tree.cmd        CLI
+build-dir-tree-ui.cmd     图形界面
+```
+
+内容就是转发到 `python -m build_dir_tree`，所以永远使用同一套已经装好本包的 Python。
+安装完会自检并打印是否可运行：
+
+```
+wrote C:\...\Scripts\build-dir-tree.cmd
+wrote C:\...\Scripts\build-dir-tree-ui.cmd
+  build-dir-tree.cmd       ok
+  build-dir-tree-ui.cmd    ok
+```
+
+之后在**任何新开的窗口**里直接输入 `build-dir-tree-ui` 就能用，不需要重开命令行。
+
+若连 `.cmd` 也不想用，下面的 `python -m` 形式始终可用，不受任何策略影响。
 
 ### 装完自检
 
@@ -555,7 +596,7 @@ spec = course.to_spec(layout="full", policy=policy)
 python -m unittest discover -s tests -t . -v
 ```
 
-95 个用例覆盖：保真命名（单/双/三空格、括号、方括号、`&`、Unicode、双重转义实体）、
+99 个用例覆盖：保真命名（单/双/三空格、括号、方括号、`&`、Unicode、双重转义实体）、
 每个加工选项（序号、压缩空格、空格替换、非法字符替换、保留尾随）、章节/子章节父子关系、
 subsection 占位过滤、两种布局、重名去重、CLI 四条输出路径、路径长度告警、保真度告警、
 树结构构建、勾选解析（整块选中、单叶选中补父目录、排除子树）、文件夹扫描
