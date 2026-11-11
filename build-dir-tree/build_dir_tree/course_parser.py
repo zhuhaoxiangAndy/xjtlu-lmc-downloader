@@ -127,6 +127,61 @@ class Course:
             "sections": [s.as_dict() for s in self.top_sections()],
         }
 
+    def to_tree(self, policy: Optional["NamePolicy"] = None) -> List[Dict[str, Any]]:
+        """Nest the course into a tree of nodes for graphical display.
+
+        Each node carries a stable ``id`` so a client can select or deselect
+        individual sections/activities, plus the resolved directory name and
+        the path it maps to.
+
+        Returns a list of top-level nodes; children are in ``children``.
+        """
+        policy = policy or DEFAULT_POLICY
+
+        def activity_node(sec: Section, act: Activity, parent_path: str) -> Dict[str, Any]:
+            name = apply_name_policy(act.name, policy)
+            path = join_name(parent_path, name, separator="/")
+            return {
+                "id": "cm-%d" % act.id,
+                "kind": "activity",
+                "label": act.name,
+                "dirName": name,
+                "path": path,
+                "modtype": act.modtype,
+                "children": [],
+            }
+
+        def section_node(sec: Section, parent_path: str, top: Optional[Section] = None) -> Dict[str, Any]:
+            name = apply_name_policy(sec.name, policy)
+            if top is not None and policy.number:
+                name = "%02d.%02d-%s" % (top.num, sec.num, name)
+            elif top is None and policy.number:
+                name = "%02d-%s" % (sec.num, name)
+            path = join_name(parent_path, name, separator="/")
+            kids: List[Dict[str, Any]] = []
+            if top is None:
+                for child in sorted(sec.children, key=lambda s: s.num):
+                    kids.append(section_node(child, path, top=sec))
+            for idx, act in enumerate(sec.real_activities(), start=1):
+                node = activity_node(sec, act, path)
+                if policy.number:
+                    node["dirName"] = "%02d %s" % (idx, node["dirName"])
+                    node["path"] = join_name(path, node["dirName"], separator="/")
+                kids.append(node)
+            return {
+                "id": "section-%d" % sec.num,
+                "kind": "section",
+                "label": sec.name,
+                "dirName": name,
+                "path": path,
+                "sectionNum": sec.num,
+                "delegated": sec.delegated,
+                "children": kids,
+            }
+
+        return [section_node(top, "") for top in self.top_sections()]
+
+
     def to_spec(
         self,
         layout: str = "sections",

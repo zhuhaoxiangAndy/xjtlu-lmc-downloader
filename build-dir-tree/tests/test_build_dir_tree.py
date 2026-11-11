@@ -354,6 +354,98 @@ class TestFidelityWarnings(unittest.TestCase):
         self.assertEqual(_fidelity_warnings(spec, "."), [])
 
 
+class TestTree(unittest.TestCase):
+    """to_tree() feeds the graphical selection UI."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.course = parse_html(load_fixture())
+        cls.tree = cls.course.to_tree()
+
+    def _walk(self, nodes):
+        for node in nodes:
+            yield node
+            yield from self._walk(node.get("children") or [])
+
+    def test_top_level_nodes_match_sections(self):
+        self.assertEqual(len(self.tree), 4)
+        self.assertTrue(all(n["kind"] == "section" for n in self.tree))
+
+    def test_subsections_are_nested(self):
+        week1 = [n for n in self.tree if n["label"].startswith("Week 1")][0]
+        kids = [n for n in week1["children"] if n["kind"] == "section"]
+        self.assertEqual(len(kids), 1)
+        self.assertIn("Week 1-Tutorial", kids[0]["dirName"])
+
+    def test_activities_are_children(self):
+        welcome = self.tree[0]
+        acts = [n for n in welcome["children"] if n["kind"] == "activity"]
+        self.assertEqual(len(acts), 2)
+        self.assertEqual(acts[0]["modtype"], "folder")
+
+    def test_paths_are_consistent(self):
+        for node in self._walk(self.tree):
+            if node["kind"] == "activity":
+                parent_path = node["path"].rsplit("/", 1)[0]
+                self.assertIn(parent_path, [n["path"] for n in self._walk(self.tree)])
+
+    def test_ids_are_unique(self):
+        ids = [n["id"] for n in self._walk(self.tree)]
+        self.assertEqual(len(ids), len(set(ids)))
+
+
+class TestSelection(unittest.TestCase):
+    """Which directories get created, given a selection."""
+
+    @classmethod
+    def setUpClass(cls):
+        from build_dir_tree.web.server import _flatten
+
+        cls.course = parse_html(load_fixture())
+        cls.tree = cls.course.to_tree()
+        cls.flat = _flatten(cls.tree)
+        cls.nodes = list(cls.walk(cls.tree))
+
+    @staticmethod
+    def walk(nodes):
+        for node in nodes:
+            yield node
+            yield from TestSelection.walk(node.get("children") or [])
+
+    def resolve(self, selected, excluded=None):
+        from build_dir_tree.web.server import _selected_paths
+
+        return _selected_paths(self.tree, set(excluded or []), selected)
+
+    def test_none_means_everything(self):
+        self.assertEqual(len(self.resolve(None)), len(self.flat))
+
+    def test_select_all_ids_equals_everything(self):
+        ids = {n["id"] for n in self.nodes}
+        self.assertEqual(len(self.resolve(ids)), len(self.flat))
+
+    def test_empty_selection_creates_nothing(self):
+        self.assertEqual(self.resolve(set()), [])
+
+    def test_selecting_only_sections_skips_activities(self):
+        ids = {n["id"] for n in self.nodes if n["kind"] == "section"}
+        result = self.resolve(ids)
+        self.assertEqual(len(result), 6)  # 4 top + 2 subsections
+        self.assertNotIn("Week 1 - Introduction to AI/[RECORDING] L1", result)
+
+    def test_selecting_a_leaf_pulls_in_ancestors(self):
+        leaf = [n for n in self.nodes if n["kind"] == "activity"][0]
+        result = self.resolve({leaf["id"]})
+        self.assertEqual(result, [self.tree[0]["path"], leaf["path"]])
+
+    def test_excluded_prunes_subtree(self):
+        welcome = self.tree[0]
+        ids = {n["id"] for n in self.nodes}
+        result = self.resolve(ids, excluded=[welcome["id"]])
+        self.assertNotIn(welcome["path"], result)
+        self.assertFalse([p for p in result if p.startswith(welcome["path"] + "/")])
+
+
 class TestEntryPoints(unittest.TestCase):
     """The user-facing ways to run this must all work."""
 
@@ -435,9 +527,10 @@ class TestWebUI(unittest.TestCase):
             self.assertEqual(resp.status, 200)
 
     def test_preview_matches_cli(self):
-        result = self._post({"snapshot": FIXTURE, "layout": "sections"})
+        result = self._post({"snapshot": FIXTURE})
         self.assertTrue(result["ok"])
-        self.assertEqual(result["count"], 6)
+        self.assertEqual(result["totalCount"], 13)
+        self.assertEqual(result["count"], 13)
         self.assertEqual(result["created"], 0)
         self.assertEqual(result["rootName"], "DEMO101-2627-S1-Demo Course")
 
@@ -469,13 +562,13 @@ class TestWebUI(unittest.TestCase):
                 {"snapshot": FIXTURE, "layout": "sections", "output": tmp, "create": True}
             )
             self.assertTrue(result["ok"])
-            self.assertEqual(result["created"], 6)
+            self.assertEqual(result["created"], 13)
             self.assertTrue(os.path.isdir(os.path.join(tmp, "DEMO101-2627-S1-Demo Course")))
 
     def test_missing_snapshot_reports_error(self):
         result = self._post({"snapshot": "Z:/does/not/exist.mhtml"})
         self.assertFalse(result["ok"])
-        self.assertIn("not found", result["error"])
+        self.assertIn("找不到文件", result["error"])
 
     def test_static_path_traversal_blocked(self):
         import urllib.error
