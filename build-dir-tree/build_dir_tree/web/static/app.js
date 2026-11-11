@@ -4,9 +4,16 @@ let treeData = [];
 const collapsed = new Set();
 const selected = new Set();
 let allIds = [];
+let settings = {};
 
 function setStatus(text, kind) {
   const el = $("status");
+  el.textContent = text || "";
+  el.className = "status" + (kind ? " " + kind : "");
+}
+
+function setSettingsStatus(text, kind) {
+  const el = $("settingsStatus");
   el.textContent = text || "";
   el.className = "status" + (kind ? " " + kind : "");
 }
@@ -38,7 +45,112 @@ async function post(url, body) {
   return await res.json();
 }
 
-/* ---------- 扫描与文件选择 ---------- */
+/* ---------------- 页签 ---------------- */
+
+function showView(which) {
+  const main = which === "main";
+  $("viewMain").hidden = !main;
+  $("viewSettings").hidden = main;
+  $("tabMain").classList.toggle("active", main);
+  $("tabSettings").classList.toggle("active", !main);
+  if (!main) loadSettingsIntoForm();
+}
+
+$("tabMain").addEventListener("click", () => showView("main"));
+$("tabSettings").addEventListener("click", () => showView("settings"));
+
+/* ---------------- 设置 ---------------- */
+
+function applySettingsToMainForm(s) {
+  $("number").checked = !!s.number;
+  $("collapseSpaces").checked = !!s.collapseSpaces;
+  $("dropTrailing").checked = s.dropTrailing !== false;
+  $("spaceReplace").value = s.spaceReplace || "";
+  $("illegalReplace").value = s.illegalReplace || "";
+  $("createRoot").checked = !!s.createRoot;
+  $("rootNameField").hidden = !s.createRoot;
+  $("rootName").value = s.rootName || "";
+  if (s.outputDir) $("output").value = s.outputDir;
+}
+
+function loadSettingsIntoForm() {
+  post("/api/settings", {}).then((data) => {
+    if (!data.ok) return;
+    settings = data.settings || {};
+    const s = settings;
+    $("setOutputDir").value = s.outputDir || "";
+    $("setCreateRoot").checked = !!s.createRoot;
+    $("setRootNameField").hidden = !s.createRoot;
+    $("setRootName").value = s.rootName || "";
+    $("setNumber").checked = !!s.number;
+    $("setCollapse").checked = !!s.collapseSpaces;
+    $("setDropTrailing").checked = s.dropTrailing !== false;
+    $("setSpaceReplace").value = s.spaceReplace || "";
+    $("setIllegalReplace").value = s.illegalReplace || "";
+    $("setScanDir").value = s.scanDir || "";
+    for (const r of document.querySelectorAll('input[name="setSelection"]')) {
+      r.checked = r.value === (s.defaultSelection || "sections");
+    }
+    const auto = data.outputDefault || "";
+    $("setOutputHint").innerHTML = auto
+      ? "留空时自动使用：<code>" + auto + "</code>"
+      : "";
+    $("configPathLabel").textContent = "设置文件：" + (data.configPath || "");
+    applySettingsToMainForm(s);
+  });
+}
+
+$("setCreateRoot").addEventListener("change", () => {
+  $("setRootNameField").hidden = !$("setCreateRoot").checked;
+});
+
+$("setBrowseOut").addEventListener("click", async () => {
+  const data = await post("/api/dialog", { kind: "dir" });
+  if (data && data.ok && data.path) $("setOutputDir").value = data.path;
+});
+
+$("setBrowseScan").addEventListener("click", async () => {
+  const data = await post("/api/dialog", { kind: "dir" });
+  if (data && data.ok && data.path) $("setScanDir").value = data.path;
+});
+
+$("saveSettings").addEventListener("click", async () => {
+  const choice = document.querySelector('input[name="setSelection"]:checked');
+  const payload = {
+    outputDir: $("setOutputDir").value.trim(),
+    createRoot: $("setCreateRoot").checked,
+    rootName: $("setRootName").value.trim(),
+    defaultSelection: choice ? choice.value : "sections",
+    number: $("setNumber").checked,
+    collapseSpaces: $("setCollapse").checked,
+    dropTrailing: $("setDropTrailing").checked,
+    spaceReplace: $("setSpaceReplace").value,
+    illegalReplace: $("setIllegalReplace").value,
+    scanDir: $("setScanDir").value.trim(),
+  };
+  const data = await post("/api/settings", { save: true, settings: payload });
+  if (data.ok) {
+    settings = data.settings;
+    applySettingsToMainForm(settings);
+    setSettingsStatus("已保存", "ok");
+  } else {
+    setSettingsStatus("保存失败：" + data.error, "err");
+  }
+});
+
+$("resetSettings").addEventListener("click", async () => {
+  const data = await post("/api/settings", { save: true, settings: {
+    outputDir: "", createRoot: false, rootName: "", defaultSelection: "sections",
+    number: false, collapseSpaces: false, dropTrailing: true,
+    spaceReplace: "", illegalReplace: "", scanDir: "",
+  } });
+  if (data.ok) {
+    loadSettingsIntoForm();
+    setSettingsStatus("已恢复默认", "ok");
+  }
+});
+
+/* ---------------- 扫描与选择文件 ---------------- */
 
 function humanSize(bytes) {
   if (bytes > 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + " MB";
@@ -48,17 +160,16 @@ function humanSize(bytes) {
 
 function showDefaultOutput(suggested, documents) {
   const hint = $("defaultHint");
-  if (!suggested) { hint.textContent = ""; return; }
-  hint.innerHTML = "";
-  const text = document.createTextNode("默认会建在：");
-  hint.appendChild(text);
+  hint.textContent = "";
+  if (!suggested) return;
+  hint.appendChild(document.createTextNode("留空时建在："));
   const code = document.createElement("code");
   code.textContent = suggested;
   hint.appendChild(code);
   if (documents) {
     const note = document.createElement("span");
     note.className = "hint-note";
-    note.textContent = "  （当前目录不适用时使用「文档」目录：" + documents + "）";
+    note.textContent = "  （文档目录：" + documents + "）";
     hint.appendChild(note);
   }
 }
@@ -85,13 +196,11 @@ function renderFound(directory, files) {
       '<span class="fname"></span><span class="fmeta">' + humanSize(file.size) + "</span>";
     btn.querySelector(".fname").textContent = file.name;
     btn.addEventListener("click", async () => {
-      for (const other of host.querySelectorAll(".found-item")) {
-        other.classList.remove("active");
-      }
+      for (const other of host.querySelectorAll(".found-item")) other.classList.remove("active");
       btn.classList.add("active");
       $("snapshot").value = file.path;
       setStatus("正在载入 " + file.name + " …");
-      await loadTree(false, file.path);
+      await loadTree("default", file.path);
     });
     li.appendChild(btn);
     list.appendChild(li);
@@ -106,8 +215,9 @@ async function scan(directory) {
     if (!data.ok) { setStatus("扫描失败：" + data.error, "err"); return; }
     renderFound(data.directory, data.files);
     showDefaultOutput(data.suggestedOutput, data.documents);
-    if (!$("output").value.trim() && data.suggestedOutput) {
-      $("output").placeholder = data.suggestedOutput;
+    if (data.settings) {
+      settings = data.settings;
+      applySettingsToMainForm(settings);
     }
   } catch (err) {
     setStatus("扫描失败：" + err.message, "err");
@@ -123,7 +233,7 @@ async function pickFile() {
     if (data.error) { setStatus("无法打开对话框：" + data.error, "err"); return; }
     if (!data.ok || !data.path) { setStatus("已取消", ""); return; }
     $("snapshot").value = data.path;
-    await loadTree(false);
+    await loadTree("default", data.path);
   } catch (err) {
     setStatus("打开对话框失败：" + err.message, "err");
   } finally {
@@ -131,21 +241,27 @@ async function pickFile() {
   }
 }
 
-async function pickDir(targetInput, label) {
-  const data = await post("/api/dialog", { kind: "dir" });
-  if (data.error) { setStatus("无法打开对话框：" + data.error, "err"); return null; }
-  if (!data.ok || !data.path) return null;
-  if (targetInput) targetInput.value = data.path;
-  if (label) label.textContent = data.path;
-  return data.path;
-}
-
-/* ---------- 树渲染 ---------- */
+/* ---------------- 目录树 ---------------- */
 
 function setSubtree(node, on) {
   if (on) selected.add(node.id);
   else selected.delete(node.id);
   for (const child of node.children || []) setSubtree(child, on);
+}
+
+function selectByMode(mode) {
+  selected.clear();
+  if (mode === "all") {
+    for (const id of allIds) selected.add(id);
+  } else if (mode === "sections") {
+    const walk = (nodes) => {
+      for (const n of nodes) {
+        if (n.kind === "section") selected.add(n.id);
+        walk(n.children || []);
+      }
+    };
+    walk(treeData);
+  }
 }
 
 function renderTree() {
@@ -166,10 +282,8 @@ function renderTree() {
     for (const node of nodes) {
       const li = document.createElement("li");
       li.className = "node " + (node.kind === "section" ? "is-section" : "is-activity");
-
       const row = document.createElement("div");
       row.className = "node-row";
-
       const hasKids = node.children && node.children.length > 0;
       const caret = document.createElement("button");
       caret.className = "caret" + (hasKids ? "" : " leaf");
@@ -183,33 +297,24 @@ function renderTree() {
         });
       }
       row.appendChild(caret);
-
       const cb = document.createElement("input");
       cb.type = "checkbox";
       cb.checked = selected.has(node.id);
-      cb.addEventListener("change", () => {
-        setSubtree(node, cb.checked);
-        renderTree();
-      });
+      cb.addEventListener("change", () => { setSubtree(node, cb.checked); renderTree(); });
       row.appendChild(cb);
-
       const label = document.createElement("span");
       label.className = "node-label";
       label.textContent = node.dirName;
       label.title = node.label + "\n" + node.path;
       row.appendChild(label);
-
       if (node.kind === "activity" && node.modtype) {
         const tag = document.createElement("span");
         tag.className = "tag";
         tag.textContent = node.modtype;
         row.appendChild(tag);
       }
-
       li.appendChild(row);
-      if (hasKids && !collapsed.has(node.id)) {
-        li.appendChild(build(node.children, depth + 1));
-      }
+      if (hasKids && !collapsed.has(node.id)) li.appendChild(build(node.children, depth + 1));
       ul.appendChild(li);
     }
     return ul;
@@ -219,99 +324,88 @@ function renderTree() {
   $("countLabel").textContent = `已选 ${selected.size} / ${allIds.length} 个目录`;
 }
 
-async function loadTree(keepSelection, snapshotPath) {
+async function loadTree(selectionMode, snapshotPath) {
   const snapshot = snapshotPath || $("snapshot").value.trim();
   if (!snapshot) { setStatus("请先选择或填写快照路径", "err"); return; }
   setStatus("正在解析…");
   try {
-    const data = await post("/api/build", Object.assign({
-      snapshot,
-      output: $("output").value.trim(),
-      rootName: $("rootName").value.trim(),
-    }, namingPayload()));
+    const body = Object.assign({ snapshot, output: $("output").value.trim(),
+      rootName: $("rootName").value.trim(), createRoot: $("createRoot").checked }, namingPayload());
+    const data = await post("/api/build", body);
     if (!data.ok) { setStatus("出错：" + data.error, "err"); return; }
     treeData = data.tree || [];
     allIds = collectIds(treeData, []);
-    if (!keepSelection) {
-      selected.clear();
-      for (const id of allIds) selected.add(id);
-    } else {
+    const mode = selectionMode === "default" ? (settings.defaultSelection || "sections") : selectionMode;
+    if (mode === "keep") {
       const valid = new Set(allIds);
       for (const id of Array.from(selected)) if (!valid.has(id)) selected.delete(id);
+    } else {
+      selectByMode(mode);
     }
     const c = data.course || {};
     $("summary").textContent =
       `${c.title || ""} — 顶层 ${c.top_sections} / 子章节 ${c.subsections} / 活动 ${c.activities}`;
-    renderTree();
-    setStatus(`已载入 ${allIds.length} 个目录`, "ok");
-    $("out").textContent = "";
-    const treeCard = document.getElementById("tree");
-    if (treeCard && treeCard.scrollIntoView) {
-      treeCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    if (data.output) {
+      showDefaultOutput(data.output, null);
     }
+    renderTree();
+    setStatus(`已载入 ${allIds.length} 个目录，已选 ${selected.size} 个`, "ok");
   } catch (err) {
     setStatus("请求失败：" + err.message, "err");
   }
 }
 
-/* ---------- 事件绑定 ---------- */
+/* ---------------- 事件 ---------------- */
 
 $("browseFile").addEventListener("click", pickFile);
 $("browseDir").addEventListener("click", async () => {
-  const dir = await pickDir(null, null);
-  if (dir) scan(dir);
+  const data = await post("/api/dialog", { kind: "dir" });
+  if (data && data.ok && data.path) scan(data.path);
 });
-$("browseOut").addEventListener("click", () => pickDir($("output"), $("outInfo")));
+$("browseOut").addEventListener("click", async () => {
+  const data = await post("/api/dialog", { kind: "dir" });
+  if (data && data.ok && data.path) $("output").value = data.path;
+});
 $("rescan").addEventListener("click", () => scan($("scanInfo").textContent.trim()));
-$("load").addEventListener("click", () => loadTree(false));
-$("reload").addEventListener("click", () => loadTree(true));
+$("load").addEventListener("click", () => loadTree("default"));
+$("reload").addEventListener("click", () => loadTree("keep"));
+
+$("createRoot").addEventListener("change", () => {
+  $("rootNameField").hidden = !$("createRoot").checked;
+});
 
 $("expandAll").addEventListener("click", () => { collapsed.clear(); renderTree(); });
 $("collapseAll").addEventListener("click", () => {
   for (const n of treeData) if (n.children && n.children.length) collapsed.add(n.id);
   renderTree();
 });
-$("selectAll").addEventListener("click", () => {
-  for (const id of allIds) selected.add(id);
-  renderTree();
-});
-$("selectNone").addEventListener("click", () => {
-  selected.clear();
-  renderTree();
-});
-$("selectSections").addEventListener("click", () => {
-  selected.clear();
-  const walk = (nodes) => {
-    for (const n of nodes) {
-      if (n.kind === "section") selected.add(n.id);
-      walk(n.children || []);
-    }
-  };
-  walk(treeData);
-  renderTree();
-});
+$("selectAll").addEventListener("click", () => selectByMode("all") || renderTree());
+$("selectNone").addEventListener("click", () => selectByMode("none") || renderTree());
+$("selectSections").addEventListener("click", () => selectByMode("sections") || renderTree());
 
 $("create").addEventListener("click", async () => {
   const output = $("output").value.trim();
-  if (!output) { setStatus("请先选择输出根目录", "err"); return; }
   if (!selected.size) { setStatus("还没有选中任何目录", "err"); return; }
   $("create").disabled = true;
   setStatus("正在创建…");
   try {
-    const data = await post("/api/build", Object.assign({
+    const body = Object.assign({
       snapshot: $("snapshot").value.trim(),
       output,
       rootName: $("rootName").value.trim(),
-      create: true,
       createRoot: $("createRoot").checked,
+      create: true,
       selected: Array.from(selected),
-    }, namingPayload()));
+    }, namingPayload());
+    const data = await post("/api/build", body);
     if (!data.ok) { setStatus("出错：" + data.error, "err"); return; }
     $("out").textContent = data.dirs.join("\n");
+    $("outCount").textContent = "（" + data.count + " 个）";
+    $("outWrap").hidden = false;
     if (data.createError) {
       setStatus("创建中断：" + data.createError, "err");
     } else {
-      setStatus(`已创建 ${data.created} 个目录（选中 ${data.count} 个，共 ${data.totalCount} 个）`, "ok");
+      setStatus(`已创建 ${data.created} 个目录，位置：${data.output}`, "ok");
     }
   } catch (err) {
     setStatus("请求失败：" + err.message, "err");
@@ -322,7 +416,7 @@ $("create").addEventListener("click", async () => {
 
 $("copy").addEventListener("click", async () => {
   const text = $("out").textContent;
-  if (!text) { setStatus("还没有可复制的内容", "err"); return; }
+  if (!text) { setStatus("还没有可复制的内容，先创建目录", "err"); return; }
   try {
     await navigator.clipboard.writeText(text);
     setStatus("已复制到剪贴板", "ok");
@@ -331,24 +425,19 @@ $("copy").addEventListener("click", async () => {
   }
 });
 
-$("createRoot").addEventListener("change", () => {
-  $("rootNameField").hidden = !$("createRoot").checked;
-});
-
 $("snapshot").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") loadTree(false);
+  if (e.key === "Enter") loadTree("default");
 });
 
 renderTree();
 
-/* ---------- 启动时自动扫描 ---------- */
+/* ---------------- 启动 ---------------- */
 
 const params = new URLSearchParams(location.search);
-const autoScan = params.get("noscan") !== "1";
 if (params.get("snapshot")) {
   $("snapshot").value = params.get("snapshot");
   if (params.get("output")) $("output").value = params.get("output");
-  if (params.get("autorun")) loadTree(false);
-} else if (autoScan) {
+  if (params.get("autorun")) loadTree("default");
+} else if (params.get("noscan") !== "1") {
   scan("");
 }

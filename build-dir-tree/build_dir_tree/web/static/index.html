@@ -8,11 +8,21 @@
 </head>
 <body>
 <header>
-  <h1>build-dir-tree</h1>
-  <p class="sub">从 LMC / Moodle 课程页快照还原目录树 · 勾选需要创建的目录</p>
+  <div class="head-row">
+    <div>
+      <h1>build-dir-tree</h1>
+      <p class="sub">从 LMC / Moodle 课程页快照还原目录树 · 勾选需要创建的目录</p>
+    </div>
+    <nav class="tabs">
+      <button id="tabMain" class="tab active">构建</button>
+      <button id="tabSettings" class="tab">设置</button>
+    </nav>
+  </div>
 </header>
 
 <main>
+  <!-- ============ 构建页 ============ -->
+  <div id="viewMain">
   <section class="card">
     <h2>1. 选择快照</h2>
 
@@ -37,7 +47,7 @@
     <div class="field">
       <label for="output">输出目录（目录树直接建在这里）</label>
       <div class="manual-row">
-        <input id="output" type="text" placeholder="留空则按下面的默认规则" autocomplete="off">
+        <input id="output" type="text" placeholder="留空则用设置里的默认值" autocomplete="off">
         <button id="browseOut" class="ghost">选择…</button>
       </div>
       <div id="defaultHint" class="hint-inline"></div>
@@ -93,8 +103,83 @@
     </div>
     <div id="status" class="status"></div>
     <div id="summary" class="summary"></div>
-    <pre id="out" class="out"></pre>
+    <div id="outWrap" hidden>
+      <div class="out-head">已创建的目录 <span id="outCount" class="out-count"></span></div>
+      <pre id="out" class="out"></pre>
+    </div>
   </section>
+  </div>
+
+  <!-- ============ 设置页 ============ -->
+  <div id="viewSettings" hidden>
+  <section class="card">
+    <h2>默认输出目录</h2>
+    <p class="hint">留空则按规则自动决定：当前工作目录可用就用它，否则「文档」目录下的 LMC\课程名。</p>
+    <div class="field">
+      <label for="setOutputDir">默认输出目录</label>
+      <div class="manual-row">
+        <input id="setOutputDir" type="text" placeholder="留空 = 自动决定" autocomplete="off">
+        <button id="setBrowseOut" class="ghost">选择…</button>
+      </div>
+      <div id="setOutputHint" class="hint-inline"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>顶层文件夹</h2>
+    <label class="inline"><input id="setCreateRoot" type="checkbox"> 额外加一层课程名文件夹</label>
+    <div class="field" id="setRootNameField" hidden>
+      <label for="setRootName">这一层文件夹的名字（留空 = 课程标题）</label>
+      <input id="setRootName" type="text" placeholder="留空自动生成" autocomplete="off">
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>载入课程时默认勾选</h2>
+    <div class="radios">
+      <label class="inline"><input type="radio" name="setSelection" value="sections" checked> 只要章节</label>
+      <label class="inline"><input type="radio" name="setSelection" value="all"> 全部（含活动）</label>
+      <label class="inline"><input type="radio" name="setSelection" value="none"> 全不选</label>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>默认命名选项</h2>
+    <label class="inline"><input id="setNumber" type="checkbox"> 加序号前缀</label>
+    <label class="inline"><input id="setCollapse" type="checkbox"> 合并连续空格</label>
+    <label class="inline"><input id="setDropTrailing" type="checkbox" checked> 去掉末尾空格和点</label>
+
+    <div class="field">
+      <label for="setSpaceReplace">空格替换为（留空 = 保持原样）</label>
+      <input id="setSpaceReplace" type="text" placeholder="留空则保留空格" autocomplete="off">
+    </div>
+
+    <div class="field">
+      <label for="setIllegalReplace">非法字符替换为（留空 = 直接删除）</label>
+      <input id="setIllegalReplace" type="text" placeholder="留空则删除 &lt; &gt; : &quot; / \ | ? *" autocomplete="off">
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>扫描目录</h2>
+    <p class="hint">打开界面时自动在这个目录里找快照。留空 = 当前工作目录。</p>
+    <div class="field">
+      <div class="manual-row">
+        <input id="setScanDir" type="text" placeholder="留空 = 当前工作目录" autocomplete="off">
+        <button id="setBrowseScan" class="ghost">选择…</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="actions">
+      <button id="saveSettings" class="primary">保存设置</button>
+      <button id="resetSettings" class="ghost">恢复默认</button>
+    </div>
+    <div id="settingsStatus" class="status"></div>
+    <div id="configPathLabel" class="summary"></div>
+  </section>
+  </div>
 </main>
 
 <script src="/app.js"></script>

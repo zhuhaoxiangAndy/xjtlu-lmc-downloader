@@ -522,6 +522,101 @@ class TestScanAndDialogs(unittest.TestCase):
         self.assertIn("file", proc.stdout)
 
 
+class TestSettings(unittest.TestCase):
+    """Persisted defaults, shared by CLI and the web UI."""
+
+    def setUp(self):
+        import tempfile
+
+        self.tmp = tempfile.mkdtemp()
+        self.cfg = os.path.join(self.tmp, "settings.json")
+        os.environ["BUILD_DIR_TREE_CONFIG"] = self.cfg
+
+    def tearDown(self):
+        os.environ.pop("BUILD_DIR_TREE_CONFIG", None)
+        import shutil
+
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_defaults_when_file_absent(self):
+        from build_dir_tree.config import load_settings
+
+        settings = load_settings()
+        self.assertEqual(settings["defaultSelection"], "sections")
+        self.assertFalse(settings["createRoot"])
+        self.assertEqual(settings["outputDir"], "")
+
+    def test_save_then_load(self):
+        from build_dir_tree.config import load_settings, save_settings
+
+        save_settings({"outputDir": r"D:\Courses", "number": True})
+        settings = load_settings()
+        self.assertEqual(settings["outputDir"], r"D:\Courses")
+        self.assertTrue(settings["number"])
+
+    def test_unknown_keys_ignored(self):
+        from build_dir_tree.config import load_settings, save_settings
+
+        save_settings({"notARealSetting": 1})
+        self.assertNotIn("notARealSetting", load_settings())
+
+    def test_corrupt_file_falls_back(self):
+        from build_dir_tree.config import load_settings
+
+        with open(self.cfg, "w", encoding="utf-8") as fh:
+            fh.write("{not json")
+        settings = load_settings()
+        self.assertEqual(settings["defaultSelection"], "sections")
+
+
+class TestDefaultSelection(unittest.TestCase):
+    """Courses load with only sections ticked unless settings say otherwise."""
+
+    def setUp(self):
+        import tempfile
+
+        self.tmp = tempfile.mkdtemp()
+        os.environ["BUILD_DIR_TREE_CONFIG"] = os.path.join(self.tmp, "s.json")
+
+    def tearDown(self):
+        os.environ.pop("BUILD_DIR_TREE_CONFIG", None)
+        import shutil
+
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _build(self, settings=None):
+        from build_dir_tree.config import save_settings
+        from build_dir_tree.web.server import _build
+
+        save_settings(settings or {})
+        return _build({"snapshot": FIXTURE})
+
+    def test_sections_only_by_default(self):
+        result = self._build()
+        self.assertEqual(result["count"], 6)   # 4 top + 2 subsections
+        self.assertEqual(result["totalCount"], 13)
+
+    def test_all_when_configured(self):
+        result = self._build({"defaultSelection": "all"})
+        self.assertEqual(result["count"], 13)
+
+    def test_none_when_configured(self):
+        result = self._build({"defaultSelection": "none"})
+        self.assertEqual(result["count"], 0)
+
+    def test_output_dir_from_settings(self):
+        result = self._build({"outputDir": r"D:\FromSettings"})
+        self.assertEqual(result["output"], r"D:\FromSettings")
+
+    def test_payload_overrides_settings(self):
+        from build_dir_tree.config import save_settings
+        from build_dir_tree.web.server import _build
+
+        save_settings({"outputDir": r"D:\FromSettings"})
+        result = _build({"snapshot": FIXTURE, "output": r"D:\Explicit"})
+        self.assertEqual(result["output"], r"D:\Explicit")
+
+
 class TestLauncherShims(unittest.TestCase):
     """WDAC blocks pip's .exe stubs, so launchers are .cmd files."""
 
@@ -782,7 +877,8 @@ class TestWebUI(unittest.TestCase):
         result = self._post({"snapshot": FIXTURE})
         self.assertTrue(result["ok"])
         self.assertEqual(result["totalCount"], 13)
-        self.assertEqual(result["count"], 13)
+        # default selection is sections only
+        self.assertEqual(result["count"], 6)
         self.assertEqual(result["created"], 0)
         self.assertEqual(result["rootName"], "")  # no wrapper by default
         self.assertEqual(result["courseDir"], "DEMO101-2627-S1-Demo Course")
@@ -816,7 +912,7 @@ class TestWebUI(unittest.TestCase):
                 {"snapshot": FIXTURE, "layout": "sections", "output": tmp, "create": True}
             )
             self.assertTrue(result["ok"])
-            self.assertEqual(result["created"], 13)
+            self.assertEqual(result["created"], 6)
             self.assertTrue(os.path.isdir(os.path.join(tmp, "Week 1 - Introduction to AI")))
             self.assertNotIn("DEMO101-2627-S1-Demo Course", os.listdir(tmp))
 

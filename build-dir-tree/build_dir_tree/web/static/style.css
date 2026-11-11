@@ -133,3 +133,20 @@ button:disabled { opacity: .5; cursor: default; }
   padding: 1px 6px; color: #c9d1d9; font: 12px/1.4 ui-monospace, Consolas, monospace;
 }
 .hint-note { color: #6f7a8d; }
+
+/* 页头与页签 */
+.head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.tabs { display: flex; gap: 6px; }
+.tab {
+  padding: 8px 16px; border-radius: 7px; border: 1px solid var(--line);
+  background: transparent; color: var(--muted); font-size: 13px; cursor: pointer;
+}
+.tab:hover { color: var(--text); border-color: #3d4658; }
+.tab.active { background: var(--panel); color: var(--text); border-color: var(--accent); }
+
+/* 结果区：只有创建过目录才出现 */
+.out-head {
+  display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px;
+  font-size: 13px; color: var(--muted);
+}
+.out-count { color: #6f7a8d; font-size: 12px; }

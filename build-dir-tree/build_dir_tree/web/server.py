@@ -17,6 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ..course_parser import NamePolicy, ParseError, apply_name_policy, parse_bytes
+from ..config import load_settings, save_settings, config_path
 from ..locations import documents_dir, suggest_output_dir
 
 __all__ = ["serve"]
@@ -46,6 +47,13 @@ def _policy_dict(policy: NamePolicy) -> Dict[str, Any]:
         "drop_trailing": policy.drop_trailing,
         "number": policy.number,
     }
+
+
+def _iter_nodes(nodes: List[Dict[str, Any]]):
+    """Yield every node in the tree, parents before children."""
+    for node in nodes:
+        yield node
+        yield from _iter_nodes(node.get("children") or [])
 
 
 def _flatten(nodes: List[Dict[str, Any]]) -> List[str]:
@@ -129,23 +137,41 @@ def _build(payload: Dict[str, Any]) -> Dict[str, Any]:
     except ParseError as exc:
         return {"ok": False, "error": str(exc)}
 
-    policy = _policy_from(payload)
+    saved = load_settings()
+    merged = dict(saved)
+    merged.update({k: v for k, v in payload.items() if v is not None})
+
+    policy = _policy_from(merged)
     tree = course.to_tree(policy=policy)
     all_paths = _flatten(tree)
 
     raw_selected = payload.get("selected")
     excluded = set(payload.get("excluded") or [])
-    selected = None if raw_selected is None else set(raw_selected)
+    if raw_selected is None:
+        # No explicit choice yet: honour the saved default selection.
+        mode = str(merged.get("defaultSelection") or "sections")
+        if mode == "none":
+            selected = set()
+        elif mode == "sections":
+            selected = {
+                node["id"] for node in _iter_nodes(tree) if node["kind"] == "section"
+            }
+        else:
+            selected = None
+    else:
+        selected = set(raw_selected)
     dirs = _selected_paths(tree, excluded, selected)
 
     course_dir = _course_dir_name(course, policy)
-    create_root = bool(payload.get("createRoot", False))
-    given_root = str(payload.get("rootName") or "").strip()
+    create_root = bool(merged.get("createRoot", False))
+    given_root = str(merged.get("rootName") or "").strip()
     root_name = (given_root or course_dir) if create_root else ""
 
     created = 0
     create_error: Optional[str] = None
-    output = str(payload.get("output") or "").strip()
+    output = str(payload.get("output") or merged.get("outputDir") or "").strip()
+    if not output:
+        output = suggest_output_dir(course_dir)
     if payload.get("create") and output:
         root = os.path.join(output, root_name) if root_name else output
         try:
@@ -171,6 +197,9 @@ def _build(payload: Dict[str, Any]) -> Dict[str, Any]:
         "created": created,
         "createError": create_error,
         "policy": _policy_dict(policy),
+        "output": output,
+        "settings": saved,
+        "configPath": config_path(),
     }
 
 
@@ -292,7 +321,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         route = self.path.split("?", 1)[0]
-        if route not in ("/api/build", "/api/dialog", "/api/scan"):
+        if route not in ("/api/build", "/api/dialog", "/api/scan", "/api/settings"):
             self._json(404, {"ok": False, "error": "not found"})
             return
         length = int(self.headers.get("Content-Length") or 0)
@@ -305,18 +334,31 @@ class Handler(BaseHTTPRequestHandler):
             self._json(400, {"ok": False, "error": "bad json: %s" % exc})
             return
         try:
-            if route == "/api/dialog":
+            if route == "/api/settings":
+                if payload.get("save"):
+                    result = {"ok": True, "settings": save_settings(payload.get("settings") or {}),
+                              "configPath": config_path()}
+                else:
+                    result = {"ok": True, "settings": load_settings(), "configPath": config_path(),
+                              "outputDefault": suggest_output_dir()}
+            elif route == "/api/dialog":
                 kind = "dir" if payload.get("kind") == "dir" else "file"
                 initial = str(payload.get("initial") or "") or _default_snapshot_dir()
                 result = _open_dialog(kind, initial)
             elif route == "/api/scan":
-                directory = str(payload.get("directory") or "") or _default_snapshot_dir()
+                directory = (
+                    str(payload.get("directory") or "")
+                    or str(load_settings().get("scanDir") or "")
+                    or _default_snapshot_dir()
+                )
                 result = {
                     "ok": True,
                     "directory": directory,
                     "files": _scan_snapshots(directory),
                     "documents": documents_dir(),
                     "suggestedOutput": suggest_output_dir(),
+                    "settings": load_settings(),
+                    "configPath": config_path(),
                 }
             else:
                 result = _build(payload)
