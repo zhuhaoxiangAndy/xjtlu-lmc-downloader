@@ -145,6 +145,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Do not strip trailing dots/spaces (Windows will drop them anyway)",
     )
+    p.add_argument("--version", action="store_true", help="Print the version and exit")
     p.add_argument("-q", "--quiet", action="store_true", help="Only emit errors")
     return p
 
@@ -233,6 +234,12 @@ def _ps1_script(spec: Dict[str, Any], root: str, root_name: str) -> str:
 
 def main(argv: Optional[List[str]] = None) -> int:
     args = build_parser().parse_args(argv)
+
+    if args.version:
+        from . import __version__
+
+        print("build-dir-tree %s" % __version__)
+        return 0
 
     if not args.snapshot:
         build_parser().print_help()

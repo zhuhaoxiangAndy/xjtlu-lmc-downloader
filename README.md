@@ -28,13 +28,19 @@ XJTLU **Learning Mall Core（LMC，Moodle）** 课程内容归档工具：把课
 | `lmc-crawler/` | 登录态复用、抓取课程页、枚举活动与附件真实地址 | 🚧 规划中 |
 | `lmc-fetch/` | 按结构批量下载文件与页面快照，断点续传、去重 | 🚧 规划中 |
 
-`build-dir-tree` **零第三方依赖**（Python 3.8+ 标准库），可独立使用：
+`build-dir-tree` **零第三方依赖**（Python 3.8+ 标准库）。先装一次，之后任何目录可用：
 
 ```bash
-cd build-dir-tree
+git clone https://github.com/zhuhaoxiangAndy/xjtlu-lmc-downloader.git
+cd xjtlu-lmc-downloader/build-dir-tree
+python -m pip install -e .
+
 python -m build_dir_tree "course.mhtml" --summary
 python -m build_dir_tree "course.mhtml" --layout full --mkdir -o ./out
+build-dir-tree-ui                                   # 图形界面
 ```
+
+不想装也行，在 `build-dir-tree` 目录里 `python run.py "course.mhtml" --summary` 即可。
 
 详见 [build-dir-tree/README.md](build-dir-tree/README.md)。
 
@@ -56,6 +62,7 @@ python -m build_dir_tree "course.mhtml" --layout full --mkdir -o ./out
 - [x] 目录名逐字符保留原始标题，仅处理 Windows 非法字符
 - [x] 可选加工：序号前缀、空格压缩、空格替换、非法字符替换（默认全部关闭）
 - [x] 本地图形界面（`python -m build_dir_tree.ui`），不联网、不上传
+- [x] 零安装启动脚本 `run.py`，不想装包时可直接跑
 - [x] 四种输出：终端预览、目录落盘、PowerShell 脚本、JSON 规格
 - [ ] 抓取层：复用浏览器登录态，拉取课程页并保存为标准快照
 - [ ] 枚举层：解析每个 `resource` / `folder` / `url` 活动的真实下载地址

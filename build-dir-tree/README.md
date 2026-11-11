@@ -25,15 +25,58 @@
 
 ## 安装
 
-无需安装，克隆即可用：
+`python -m build_dir_tree` **必须先安装**（或让 Python 找得到这个包），否则会报
+`No module named build_dir_tree`。三选一：
+
+### 方式 A：可编辑安装（推荐，装一次即可）
 
 ```bash
 git clone https://github.com/zhuhaoxiangAndy/xjtlu-lmc-downloader.git
 cd xjtlu-lmc-downloader/build-dir-tree
-python -m unittest discover -s tests -t .     # 可选：跑测试
+python -m pip install -e .
 ```
 
-要求 Python 3.8 或更高。没有任何 pip 依赖。
+装完后在**任何目录**都能用：
+
+```bash
+python -m build_dir_tree course.mhtml --summary
+build-dir-tree course.mhtml --summary          # 等价的命令行入口
+build-dir-tree-ui                              # 图形界面
+```
+
+要求 Python 3.8+。零第三方依赖。
+
+### 方式 B：不安装，直接跑（临时试用）
+
+在仓库的 `build-dir-tree` 目录里执行，用 `-m` 前先设 `PYTHONPATH`：
+
+```bash
+cd xjtlu-lmc-downloader/build-dir-tree
+python run.py course.mhtml --summary
+```
+
+或：
+
+```powershell
+$env:PYTHONPATH = "."
+python -m build_dir_tree course.mhtml --summary
+```
+
+### 方式 C：装在虚拟环境里
+
+```bash
+cd xjtlu-lmc-downloader/build-dir-tree
+python -m venv .venv
+.venv\Scripts\activate        # Windows
+python -m pip install -e .
+```
+
+### 装完自检
+
+```bash
+python -m build_dir_tree --version
+python -m unittest discover -s tests -t .    # 可选：跑测试
+```
 
 ## 快速开始
 

@@ -354,6 +354,39 @@ class TestFidelityWarnings(unittest.TestCase):
         self.assertEqual(_fidelity_warnings(spec, "."), [])
 
 
+class TestEntryPoints(unittest.TestCase):
+    """The user-facing ways to run this must all work."""
+
+    def test_version_flag(self):
+        from build_dir_tree.cli import main
+
+        self.assertEqual(main(["--version"]), 0)
+
+    def test_run_py_exists_and_dispatches(self):
+        import subprocess
+
+        runpy = os.path.join(ROOT, "run.py")
+        self.assertTrue(os.path.isfile(runpy))
+        proc = subprocess.run(
+            [sys.executable, runpy, FIXTURE, "--summary", "--quiet"],
+            capture_output=True, text=True, timeout=120,
+            env={**os.environ, "PYTHONPATH": ""},
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+    def test_run_py_help_works(self):
+        import subprocess
+
+        runpy = os.path.join(ROOT, "run.py")
+        proc = subprocess.run(
+            [sys.executable, runpy, "--help"],
+            capture_output=True, text=True, timeout=120,
+            env={**os.environ, "PYTHONPATH": ""},
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("build-dir-tree", proc.stdout)
+
+
 class TestWebUI(unittest.TestCase):
     """The local UI is a thin shell over the same parser/policy code."""
 
