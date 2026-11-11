@@ -14,21 +14,42 @@
 
 <main>
   <section class="card">
-    <h2>1. 快照</h2>
-    <label>课程页快照路径（.mhtml / .html）
-      <input id="snapshot" type="text" placeholder="D:\Downloads\Course.mhtml" autocomplete="off">
-    </label>
-    <label>输出根目录（点「创建目录」时使用）
+    <h2>1. 选择快照</h2>
+
+    <div class="picker">
+      <button id="browseFile" class="primary">选择课程快照…</button>
+      <button id="browseDir" class="ghost">换个目录查找…</button>
+      <button id="rescan" class="ghost">重新扫描</button>
+      <span id="scanInfo" class="scan-info"></span>
+    </div>
+
+    <div id="found" class="found"></div>
+
+    <details class="manual">
+      <summary>或手动输入路径</summary>
+      <label>课程页快照路径（.mhtml / .html）
+        <input id="snapshot" type="text" placeholder="D:\Downloads\Course.mhtml" autocomplete="off">
+      </label>
+      <button id="load">载入</button>
+    </details>
+  </section>
+
+  <section class="card">
+    <h2>2. 输出位置</h2>
+    <div class="picker">
+      <button id="browseOut" class="ghost">选择输出目录…</button>
+      <span id="outInfo" class="scan-info"></span>
+    </div>
+    <label>输出根目录（点「创建选中目录」时使用）
       <input id="output" type="text" placeholder="D:\Courses" autocomplete="off">
     </label>
     <label>顶层文件夹名（留空自动取课程标题）
       <input id="rootName" type="text" placeholder="留空自动生成" autocomplete="off">
     </label>
-    <button id="load" class="primary">载入课程</button>
   </section>
 
   <section class="card">
-    <h2>2. 命名选项</h2>
+    <h2>3. 命名选项</h2>
     <p class="hint">默认与 LMC 页面标题逐字符一致。改动后点「重新载入」生效。</p>
 
     <label class="inline"><input id="number" type="checkbox"> 加序号前缀（04- / 04.16- / 01 ）</label>
@@ -51,7 +72,7 @@
   </section>
 
   <section class="card">
-    <h2>3. 目录树</h2>
+    <h2>4. 目录树</h2>
     <div class="tree-toolbar">
       <button id="expandAll" class="ghost">全部展开</button>
       <button id="collapseAll" class="ghost">全部折叠</button>
@@ -64,7 +85,7 @@
   </section>
 
   <section class="card">
-    <h2>4. 结果</h2>
+    <h2>5. 结果</h2>
     <div class="actions">
       <button id="create" class="primary">创建选中目录</button>
       <button id="copy" class="ghost">复制路径列表</button>

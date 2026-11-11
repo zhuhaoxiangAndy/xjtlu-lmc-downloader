@@ -75,3 +75,22 @@ button:disabled { opacity: .5; cursor: default; }
   font: 12.5px/1.55 ui-monospace, Consolas, monospace;
   white-space: pre-wrap; word-break: break-all; color: #c9d1d9;
 }
+
+.picker { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.scan-info { color: var(--muted); font-size: 12px; font-family: ui-monospace, Consolas, monospace;
+             word-break: break-all; }
+.found { margin-bottom: 12px; }
+.found-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.found-item {
+  width: 100%; text-align: left; display: flex; gap: 12px; align-items: center;
+  padding: 8px 12px; background: #0d1017; border: 1px solid var(--line);
+  border-radius: 7px; cursor: pointer; color: var(--text);
+}
+.found-item:hover { border-color: var(--accent); background: #12161f; }
+.found-item .fname {
+  flex: 1; font: 12.5px/1.4 ui-monospace, Consolas, monospace;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.found-item .fmeta { color: var(--muted); font-size: 11.5px; flex: 0 0 auto; }
+.manual { margin-top: 8px; }
+.manual summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-bottom: 10px; }

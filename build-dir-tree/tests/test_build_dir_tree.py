@@ -446,6 +446,62 @@ class TestSelection(unittest.TestCase):
         self.assertFalse([p for p in result if p.startswith(welcome["path"] + "/")])
 
 
+class TestScanAndDialogs(unittest.TestCase):
+    """Folder scanning for auto-discovery, and the picker plumbing."""
+
+    def test_scan_finds_snapshots_newest_first(self):
+        import tempfile
+        import time
+
+        from build_dir_tree.web.server import _scan_snapshots
+
+        with tempfile.TemporaryDirectory() as tmp:
+            older = os.path.join(tmp, "older.mhtml")
+            newer = os.path.join(tmp, "newer.html")
+            ignored = os.path.join(tmp, "notes.txt")
+            for path in (older, newer, ignored):
+                with open(path, "w", encoding="utf-8") as fh:
+                    fh.write("x")
+            stamp = time.time()
+            os.utime(older, (stamp - 100, stamp - 100))
+            os.utime(newer, (stamp, stamp))
+
+            found = _scan_snapshots(tmp)
+            names = [item["name"] for item in found]
+            self.assertEqual(names, ["newer.html", "older.mhtml"])
+
+    def test_scan_ignores_missing_directory(self):
+        from build_dir_tree.web.server import _scan_snapshots
+
+        self.assertEqual(_scan_snapshots("Z:/definitely/not/here"), [])
+
+    def test_scan_ignores_subdirectories(self):
+        import tempfile
+
+        from build_dir_tree.web.server import _scan_snapshots
+
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, "nested.mhtml"))
+            self.assertEqual(_scan_snapshots(tmp), [])
+
+    def test_default_dirs_exist(self):
+        from build_dir_tree.web.server import _default_snapshot_dir
+
+        self.assertTrue(os.path.isdir(_default_snapshot_dir()))
+
+    def test_dialog_module_emits_json(self):
+        import subprocess
+
+        # Missing/invalid kind must still exit cleanly with JSON on stdout.
+        proc = subprocess.run(
+            [sys.executable, "-m", "build_dir_tree.web.dialogs", "--help"],
+            capture_output=True, text=True, timeout=120,
+            env={**os.environ, "PYTHONPATH": ROOT, "PYTHONIOENCODING": "utf-8"},
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("file", proc.stdout)
+
+
 class TestEntryPoints(unittest.TestCase):
     """The user-facing ways to run this must all work."""
 

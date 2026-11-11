@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import threading
 import webbrowser
@@ -169,6 +170,80 @@ def _build(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _default_snapshot_dir() -> str:
+    """Best guess at the folder the user keeps course snapshots in.
+
+    Prefers the current working directory, then the user profile downloads
+    folder, then the home directory.
+    """
+    for candidate in (
+        os.getcwd(),
+        os.path.join(os.path.expanduser("~"), "Downloads"),
+        os.path.expanduser("~"),
+    ):
+        if candidate and os.path.isdir(candidate):
+            return candidate
+    return ""
+
+
+def _scan_snapshots(directory: str, limit: int = 200) -> List[Dict[str, Any]]:
+    """Find .mhtml/.html snapshots in a folder (non-recursive), newest first."""
+    if not directory or not os.path.isdir(directory):
+        return []
+    found: List[Dict[str, Any]] = []
+    try:
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                if not entry.is_file():
+                    continue
+                if not entry.name.lower().endswith((".mhtml", ".mht", ".html", ".htm")):
+                    continue
+                try:
+                    stat = entry.stat()
+                except OSError:
+                    continue
+                found.append(
+                    {
+                        "path": entry.path,
+                        "name": entry.name,
+                        "size": stat.st_size,
+                        "modified": int(stat.st_mtime),
+                    }
+                )
+    except OSError:
+        return []
+    found.sort(key=lambda item: item["modified"], reverse=True)
+    return found[:limit]
+
+
+def _open_dialog(kind: str, initial: str) -> Dict[str, Any]:
+    """Run the tkinter picker in a child process and read its choice back."""
+    cmd = [sys.executable, "-m", "build_dir_tree.web.dialogs", kind]
+    if initial:
+        cmd += ["--initial", initial]
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=300,
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        )
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "path": "", "error": "对话框超时未返回"}
+    except OSError as exc:
+        return {"ok": False, "path": "", "error": "无法启动对话框: %s" % exc}
+
+    out = (proc.stdout or "").strip()
+    if not out:
+        err = (proc.stderr or "").strip().splitlines()
+        detail = err[-1] if err else "对话框没有返回结果"
+        return {"ok": False, "path": "", "error": detail}
+    try:
+        return json.loads(out)
+    except ValueError:
+        return {"ok": False, "path": "", "error": "对话框返回了无法解析的内容"}
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "build-dir-tree"
 
@@ -212,7 +287,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, fh.read(), ctype)
 
     def do_POST(self) -> None:  # noqa: N802
-        if self.path.split("?", 1)[0] != "/api/build":
+        route = self.path.split("?", 1)[0]
+        if route not in ("/api/build", "/api/dialog", "/api/scan"):
             self._json(404, {"ok": False, "error": "not found"})
             return
         length = int(self.headers.get("Content-Length") or 0)
@@ -225,11 +301,26 @@ class Handler(BaseHTTPRequestHandler):
             self._json(400, {"ok": False, "error": "bad json: %s" % exc})
             return
         try:
-            result = _build(payload)
+            if route == "/api/dialog":
+                kind = "dir" if payload.get("kind") == "dir" else "file"
+                initial = str(payload.get("initial") or "") or _default_snapshot_dir()
+                result = _open_dialog(kind, initial)
+            elif route == "/api/scan":
+                directory = str(payload.get("directory") or "") or _default_snapshot_dir()
+                result = {
+                    "ok": True,
+                    "directory": directory,
+                    "files": _scan_snapshots(directory),
+                }
+            else:
+                result = _build(payload)
         except Exception as exc:
             self._json(500, {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)})
             return
-        self._json(200 if result.get("ok") else 400, result)
+        ok = bool(result.get("ok"))
+        if route == "/api/scan":
+            ok = True
+        self._json(200 if ok else 400, result)
 
 
 def serve(

@@ -5,21 +5,6 @@ const collapsed = new Set();
 const selected = new Set();
 let allIds = [];
 
-function layoutValue() {
-  const el = document.querySelector('input[name="layout"]:checked');
-  return el ? el.value : "sections";
-}
-
-function namingPayload() {
-  return {
-    number: $("number").checked,
-    collapseSpaces: $("collapseSpaces").checked,
-    spaceReplace: $("spaceReplace").value,
-    illegalReplace: $("illegalReplace").value,
-    dropTrailing: $("dropTrailing").checked,
-  };
-}
-
 function setStatus(text, kind) {
   const el = $("status");
   el.textContent = text || "";
@@ -34,17 +19,111 @@ function collectIds(nodes, out) {
   return out;
 }
 
-function countSelected() {
-  let n = 0;
-  for (const id of selected) n++;
-  return n;
+function namingPayload() {
+  return {
+    number: $("number").checked,
+    collapseSpaces: $("collapseSpaces").checked,
+    spaceReplace: $("spaceReplace").value,
+    illegalReplace: $("illegalReplace").value,
+    dropTrailing: $("dropTrailing").checked,
+  };
+}
+
+async function post(url, body) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+  return await res.json();
+}
+
+/* ---------- 扫描与文件选择 ---------- */
+
+function humanSize(bytes) {
+  if (bytes > 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + " MB";
+  if (bytes > 1024) return Math.round(bytes / 1024) + " KB";
+  return bytes + " B";
+}
+
+function renderFound(directory, files) {
+  const host = $("found");
+  host.textContent = "";
+  $("scanInfo").textContent = directory || "";
+  if (!files || !files.length) {
+    host.innerHTML = '<div class="empty">这个目录里没有找到 .mhtml / .html 快照。换个目录试试。</div>';
+    return;
+  }
+  const list = document.createElement("ul");
+  list.className = "found-list";
+  for (const file of files) {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.className = "found-item";
+    btn.title = file.path;
+    btn.innerHTML =
+      '<span class="fname"></span><span class="fmeta">' + humanSize(file.size) + "</span>";
+    btn.querySelector(".fname").textContent = file.name;
+    btn.addEventListener("click", () => {
+      $("snapshot").value = file.path;
+      loadTree(false);
+    });
+    li.appendChild(btn);
+    list.appendChild(li);
+  }
+  host.appendChild(list);
+}
+
+async function scan(directory) {
+  $("rescan").disabled = true;
+  try {
+    const data = await post("/api/scan", { directory: directory || "" });
+    if (!data.ok) { setStatus("扫描失败：" + data.error, "err"); return; }
+    renderFound(data.directory, data.files);
+  } catch (err) {
+    setStatus("扫描失败：" + err.message, "err");
+  } finally {
+    $("rescan").disabled = false;
+  }
+}
+
+async function pickFile() {
+  $("browseFile").disabled = true;
+  try {
+    const data = await post("/api/dialog", { kind: "file" });
+    if (data.error) { setStatus("无法打开对话框：" + data.error, "err"); return; }
+    if (!data.ok || !data.path) { setStatus("已取消", ""); return; }
+    $("snapshot").value = data.path;
+    await loadTree(false);
+  } catch (err) {
+    setStatus("打开对话框失败：" + err.message, "err");
+  } finally {
+    $("browseFile").disabled = false;
+  }
+}
+
+async function pickDir(targetInput, label) {
+  const data = await post("/api/dialog", { kind: "dir" });
+  if (data.error) { setStatus("无法打开对话框：" + data.error, "err"); return null; }
+  if (!data.ok || !data.path) return null;
+  if (targetInput) targetInput.value = data.path;
+  if (label) label.textContent = data.path;
+  return data.path;
+}
+
+/* ---------- 树渲染 ---------- */
+
+function setSubtree(node, on) {
+  if (on) selected.add(node.id);
+  else selected.delete(node.id);
+  for (const child of node.children || []) setSubtree(child, on);
 }
 
 function renderTree() {
   const host = $("tree");
   host.textContent = "";
   if (!treeData.length) {
-    host.innerHTML = '<div class="empty">还没有载入课程。填好快照路径后点「载入课程」。</div>';
+    host.innerHTML = '<div class="empty">还没有载入课程。点上面的「选择课程快照…」。</div>';
     $("countLabel").textContent = "";
     return;
   }
@@ -105,48 +184,19 @@ function renderTree() {
   };
 
   host.appendChild(build(treeData, 0));
-  $("countLabel").textContent = `已选 ${countSelected()} / ${allIds.length} 个目录`;
+  $("countLabel").textContent = `已选 ${selected.size} / ${allIds.length} 个目录`;
 }
 
-function setSubtree(node, on) {
-  if (on) selected.add(node.id);
-  else selected.delete(node.id);
-  for (const child of node.children || []) setSubtree(child, on);
-}
-
-function findNode(nodes, id) {
-  for (const n of nodes) {
-    if (n.id === id) return n;
-    const hit = findNode(n.children || [], id);
-    if (hit) return hit;
-  }
-  return null;
-}
-
-async function callBuild(extra) {
-  const snapshot = $("snapshot").value.trim();
-  if (!snapshot) { setStatus("请先填写快照路径", "err"); return null; }
-  const body = Object.assign({
-    snapshot,
-    output: $("output").value.trim(),
-    rootName: $("rootName").value.trim(),
-    layout: layoutValue(),
-  }, namingPayload(), extra || {});
-  const res = await fetch("/api/build", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  return await res.json();
-}
-
-async function loadTree(keepSelection) {
-  $("load").disabled = true;
-  $("reload").disabled = true;
+async function loadTree(keepSelection, snapshotPath) {
+  const snapshot = snapshotPath || $("snapshot").value.trim();
+  if (!snapshot) { setStatus("请先选择或填写快照路径", "err"); return; }
   setStatus("正在解析…");
   try {
-    const data = await callBuild({});
-    if (!data) return;
+    const data = await post("/api/build", Object.assign({
+      snapshot,
+      output: $("output").value.trim(),
+      rootName: $("rootName").value.trim(),
+    }, namingPayload()));
     if (!data.ok) { setStatus("出错：" + data.error, "err"); return; }
     treeData = data.tree || [];
     allIds = collectIds(treeData, []);
@@ -154,7 +204,6 @@ async function loadTree(keepSelection) {
       selected.clear();
       for (const id of allIds) selected.add(id);
     } else {
-      // drop ids that no longer exist, keep the rest
       const valid = new Set(allIds);
       for (const id of Array.from(selected)) if (!valid.has(id)) selected.delete(id);
     }
@@ -162,16 +211,22 @@ async function loadTree(keepSelection) {
     $("summary").textContent =
       `${c.title || ""} — 顶层 ${c.top_sections} / 子章节 ${c.subsections} / 活动 ${c.activities}`;
     renderTree();
-    setStatus("已载入，共 " + allIds.length + " 个目录", "ok");
+    setStatus(`已载入 ${allIds.length} 个目录`, "ok");
     $("out").textContent = "";
   } catch (err) {
     setStatus("请求失败：" + err.message, "err");
-  } finally {
-    $("load").disabled = false;
-    $("reload").disabled = false;
   }
 }
 
+/* ---------- 事件绑定 ---------- */
+
+$("browseFile").addEventListener("click", pickFile);
+$("browseDir").addEventListener("click", async () => {
+  const dir = await pickDir(null, null);
+  if (dir) scan(dir);
+});
+$("browseOut").addEventListener("click", () => pickDir($("output"), $("outInfo")));
+$("rescan").addEventListener("click", () => scan($("scanInfo").textContent.trim()));
 $("load").addEventListener("click", () => loadTree(false));
 $("reload").addEventListener("click", () => loadTree(true));
 
@@ -202,13 +257,18 @@ $("selectSections").addEventListener("click", () => {
 
 $("create").addEventListener("click", async () => {
   const output = $("output").value.trim();
-  if (!output) { setStatus("请先填写输出根目录", "err"); return; }
+  if (!output) { setStatus("请先选择输出根目录", "err"); return; }
   if (!selected.size) { setStatus("还没有选中任何目录", "err"); return; }
   $("create").disabled = true;
   setStatus("正在创建…");
   try {
-    const data = await callBuild({ create: true, selected: Array.from(selected) });
-    if (!data) return;
+    const data = await post("/api/build", Object.assign({
+      snapshot: $("snapshot").value.trim(),
+      output,
+      rootName: $("rootName").value.trim(),
+      create: true,
+      selected: Array.from(selected),
+    }, namingPayload()));
     if (!data.ok) { setStatus("出错：" + data.error, "err"); return; }
     $("out").textContent = data.dirs.join("\n");
     if (data.createError) {
@@ -240,11 +300,14 @@ $("snapshot").addEventListener("keydown", (e) => {
 
 renderTree();
 
-// AUTOLOAD: lets automation pre-fill the snapshot path via the query string.
-//   ?snapshot=<path>&autorun=1
+/* ---------- 启动时自动扫描 ---------- */
+
 const params = new URLSearchParams(location.search);
+const autoScan = params.get("noscan") !== "1";
 if (params.get("snapshot")) {
   $("snapshot").value = params.get("snapshot");
   if (params.get("output")) $("output").value = params.get("output");
   if (params.get("autorun")) loadTree(false);
+} else if (autoScan) {
+  scan("");
 }
