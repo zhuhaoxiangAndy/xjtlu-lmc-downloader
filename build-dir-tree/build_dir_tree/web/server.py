@@ -17,6 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ..course_parser import NamePolicy, ParseError, apply_name_policy, parse_bytes
+from ..locations import documents_dir, suggest_output_dir
 
 __all__ = ["serve"]
 
@@ -104,10 +105,7 @@ def _selected_paths(
     return out
 
 
-def _root_name(course, policy: NamePolicy, given: str) -> str:
-    name = (given or "").strip()
-    if name:
-        return name
+def _course_dir_name(course, policy: NamePolicy) -> str:
     title = course.title
     for suffix in (" | LM Core", " | Learning Mall Core"):
         if title.endswith(suffix):
@@ -140,13 +138,16 @@ def _build(payload: Dict[str, Any]) -> Dict[str, Any]:
     selected = None if raw_selected is None else set(raw_selected)
     dirs = _selected_paths(tree, excluded, selected)
 
-    root_name = _root_name(course, policy, str(payload.get("rootName") or ""))
+    course_dir = _course_dir_name(course, policy)
+    create_root = bool(payload.get("createRoot", False))
+    given_root = str(payload.get("rootName") or "").strip()
+    root_name = (given_root or course_dir) if create_root else ""
 
     created = 0
     create_error: Optional[str] = None
     output = str(payload.get("output") or "").strip()
     if payload.get("create") and output:
-        root = os.path.join(output, root_name)
+        root = os.path.join(output, root_name) if root_name else output
         try:
             for name in dirs:
                 path = os.path.join(root, *name.split("/"))
@@ -160,6 +161,9 @@ def _build(payload: Dict[str, Any]) -> Dict[str, Any]:
         "ok": True,
         "course": course.summary(),
         "rootName": root_name,
+        "courseDir": course_dir,
+        "createRoot": create_root,
+        "outputBase": output,
         "count": len(dirs),
         "totalCount": len(all_paths),
         "dirs": dirs,
@@ -311,6 +315,8 @@ class Handler(BaseHTTPRequestHandler):
                     "ok": True,
                     "directory": directory,
                     "files": _scan_snapshots(directory),
+                    "documents": documents_dir(),
+                    "suggestedOutput": suggest_output_dir(),
                 }
             else:
                 result = _build(payload)

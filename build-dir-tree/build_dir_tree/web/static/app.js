@@ -46,6 +46,23 @@ function humanSize(bytes) {
   return bytes + " B";
 }
 
+function showDefaultOutput(suggested, documents) {
+  const hint = $("defaultHint");
+  if (!suggested) { hint.textContent = ""; return; }
+  hint.innerHTML = "";
+  const text = document.createTextNode("默认会建在：");
+  hint.appendChild(text);
+  const code = document.createElement("code");
+  code.textContent = suggested;
+  hint.appendChild(code);
+  if (documents) {
+    const note = document.createElement("span");
+    note.className = "hint-note";
+    note.textContent = "  （当前目录不适用时使用「文档」目录：" + documents + "）";
+    hint.appendChild(note);
+  }
+}
+
 function renderFound(directory, files) {
   const host = $("found");
   host.textContent = "";
@@ -88,6 +105,10 @@ async function scan(directory) {
     const data = await post("/api/scan", { directory: directory || "" });
     if (!data.ok) { setStatus("扫描失败：" + data.error, "err"); return; }
     renderFound(data.directory, data.files);
+    showDefaultOutput(data.suggestedOutput, data.documents);
+    if (!$("output").value.trim() && data.suggestedOutput) {
+      $("output").placeholder = data.suggestedOutput;
+    }
   } catch (err) {
     setStatus("扫描失败：" + err.message, "err");
   } finally {
@@ -282,6 +303,7 @@ $("create").addEventListener("click", async () => {
       output,
       rootName: $("rootName").value.trim(),
       create: true,
+      createRoot: $("createRoot").checked,
       selected: Array.from(selected),
     }, namingPayload()));
     if (!data.ok) { setStatus("出错：" + data.error, "err"); return; }
@@ -307,6 +329,10 @@ $("copy").addEventListener("click", async () => {
   } catch {
     setStatus("复制失败，请手动选中", "err");
   }
+});
+
+$("createRoot").addEventListener("change", () => {
+  $("rootNameField").hidden = !$("createRoot").checked;
 });
 
 $("snapshot").addEventListener("keydown", (e) => {

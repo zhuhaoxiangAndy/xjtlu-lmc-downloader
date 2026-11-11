@@ -126,3 +126,10 @@ button:disabled { opacity: .5; cursor: default; }
   background: #16203a;
   box-shadow: inset 0 0 0 1px var(--accent);
 }
+
+.hint-inline { margin-top: 8px; font-size: 12.5px; color: var(--muted); line-height: 1.7; }
+.hint-inline code {
+  background: #0d1017; border: 1px solid var(--line); border-radius: 4px;
+  padding: 1px 6px; color: #c9d1d9; font: 12px/1.4 ui-monospace, Consolas, monospace;
+}
+.hint-note { color: #6f7a8d; }

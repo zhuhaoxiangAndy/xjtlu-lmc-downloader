@@ -24,6 +24,7 @@ from build_dir_tree import (  # noqa: E402
 from build_dir_tree.cli import main  # noqa: E402
 
 FIXTURE = os.path.join(HERE, "fixtures", "demo_course.html")
+TMP_BASE = tempfile.gettempdir()
 
 
 def load_fixture() -> str:
@@ -267,25 +268,44 @@ class TestCli(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertEqual(os.listdir(tmp), [])
 
-    def test_mkdir_requires_output(self):
-        with self.assertRaises(SystemExit):
-            main([FIXTURE, "--mkdir", "--quiet"])
+    def test_mkdir_without_output_uses_default(self):
+        """Without -o the CLI resolves a default instead of failing."""
+        import build_dir_tree.cli as cli_mod
+
+        original = cli_mod.suggest_output_dir
+        captured = {}
+
+        def fake(name=""):
+            captured["dir"] = os.path.join(TMP_BASE, "dsh-default-out")
+            return captured["dir"]
+
+        try:
+            cli_mod.suggest_output_dir = fake
+            rc = main([FIXTURE, "--layout", "sections", "--mkdir", "--quiet"])
+        finally:
+            cli_mod.suggest_output_dir = original
+
+        self.assertEqual(rc, 0)
+        self.assertIn("dir", captured)
 
     def test_mkdir_creates_expected_tree(self):
         with tempfile.TemporaryDirectory() as tmp:
             rc = main([FIXTURE, "--layout", "sections", "--mkdir", "-o", tmp, "--quiet"])
             self.assertEqual(rc, 0)
-            root = os.path.join(tmp, "DEMO101-2627-S1-Demo Course")
-            self.assertTrue(os.path.isdir(root))
-            self.assertTrue(os.path.isdir(os.path.join(root, "Week 1 - Introduction to AI",
-                                                       "Week 1-Tutorial")))
+            # default: no wrapper folder, sections sit directly in the output
+            self.assertTrue(os.path.isdir(os.path.join(tmp, "Week 1 - Introduction to AI")))
+            self.assertTrue(
+                os.path.isdir(
+                    os.path.join(tmp, "Week 1 - Introduction to AI", "Week 1-Tutorial")
+                )
+            )
 
     def test_mkdir_is_idempotent(self):
         with tempfile.TemporaryDirectory() as tmp:
-            main([FIXTURE, "--mkdir", "-o", tmp, "--quiet"])
-            main([FIXTURE, "--mkdir", "-o", tmp, "--quiet"])
-            root = os.path.join(tmp, "DEMO101-2627-S1-Demo Course")
-            self.assertEqual(len(os.listdir(root)), 4)
+            main([FIXTURE, "--layout", "sections", "--mkdir", "-o", tmp, "--quiet"])
+            main([FIXTURE, "--layout", "sections", "--mkdir", "-o", tmp, "--quiet"])
+            # 4 top-level sections, no wrapper
+            self.assertEqual(len(os.listdir(tmp)), 4)
 
     def test_emit_ps1(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -502,6 +522,97 @@ class TestScanAndDialogs(unittest.TestCase):
         self.assertIn("file", proc.stdout)
 
 
+class TestLocations(unittest.TestCase):
+    """Default output directory: cwd when sensible, else Documents/LMC."""
+
+    def test_documents_dir_exists(self):
+        from build_dir_tree.locations import documents_dir
+
+        self.assertTrue(os.path.isdir(documents_dir()))
+
+    def test_documents_not_assumed_under_home(self):
+        """Documents may live on another drive; do not hardcode ~/Documents."""
+        from build_dir_tree.locations import documents_dir
+
+        path = documents_dir()
+        self.assertTrue(os.path.isabs(path))
+        self.assertTrue(os.path.isdir(path))
+
+    def test_home_is_treated_as_unhelpful(self):
+        from build_dir_tree.locations import _is_unhelpful_cwd
+
+        self.assertTrue(_is_unhelpful_cwd(os.path.expanduser("~")))
+
+    def test_project_dir_is_helpful(self):
+        from build_dir_tree.locations import _is_unhelpful_cwd
+
+        self.assertFalse(_is_unhelpful_cwd(os.getcwd()))
+
+    def test_suggest_uses_cwd_when_helpful(self):
+        from build_dir_tree.locations import suggest_output_dir
+
+        cwd = os.getcwd()
+        self.assertEqual(
+            os.path.normcase(suggest_output_dir("X")), os.path.normcase(cwd)
+        )
+
+    def test_suggest_falls_back_to_documents_lmc(self):
+        from build_dir_tree.locations import documents_dir, suggest_output_dir
+
+        original = os.getcwd()
+        try:
+            os.chdir(os.path.expanduser("~"))
+            got = suggest_output_dir("ISA104")
+        finally:
+            os.chdir(original)
+
+        expected = os.path.join(documents_dir(), "LMC", "ISA104")
+        self.assertEqual(os.path.normcase(got), os.path.normcase(expected))
+
+    def test_suggest_without_course_name(self):
+        from build_dir_tree.locations import documents_dir, suggest_output_dir
+
+        original = os.getcwd()
+        try:
+            os.chdir(os.path.expanduser("~"))
+            got = suggest_output_dir()
+        finally:
+            os.chdir(original)
+
+        expected = os.path.join(documents_dir(), "LMC")
+        self.assertEqual(os.path.normcase(got), os.path.normcase(expected))
+
+
+class TestCreateRoot(unittest.TestCase):
+    """No wrapper folder by default; createRoot adds one."""
+
+    def test_cli_default_has_no_wrapper(self):
+        import tempfile
+
+        from build_dir_tree.cli import main as cli_main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            rc = cli_main([FIXTURE, "--layout", "sections", "--mkdir", "-o", tmp, "--quiet"])
+            self.assertEqual(rc, 0)
+            top = os.listdir(tmp)
+            # the section folders land directly in the output directory
+            self.assertIn("Week 1 - Introduction to AI", top)
+            self.assertNotIn("DEMO101-2627-S1-Demo Course", top)
+
+    def test_cli_with_root_wraps(self):
+        import tempfile
+
+        from build_dir_tree.cli import main as cli_main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            rc = cli_main(
+                [FIXTURE, "--layout", "sections", "--mkdir", "--with-root", "-o", tmp, "--quiet"]
+            )
+            self.assertEqual(rc, 0)
+            top = os.listdir(tmp)
+            self.assertEqual(top, ["DEMO101-2627-S1-Demo Course"])
+
+
 class TestDialogDPI(unittest.TestCase):
     """The picker must declare DPI awareness before Tk starts."""
 
@@ -615,7 +726,9 @@ class TestWebUI(unittest.TestCase):
         self.assertEqual(result["totalCount"], 13)
         self.assertEqual(result["count"], 13)
         self.assertEqual(result["created"], 0)
-        self.assertEqual(result["rootName"], "DEMO101-2627-S1-Demo Course")
+        self.assertEqual(result["rootName"], "")  # no wrapper by default
+        self.assertEqual(result["courseDir"], "DEMO101-2627-S1-Demo Course")
+        self.assertFalse(result["createRoot"])
 
     def test_default_policy_is_faithful(self):
         result = self._post({"snapshot": FIXTURE, "layout": "sections"})
@@ -646,7 +759,8 @@ class TestWebUI(unittest.TestCase):
             )
             self.assertTrue(result["ok"])
             self.assertEqual(result["created"], 13)
-            self.assertTrue(os.path.isdir(os.path.join(tmp, "DEMO101-2627-S1-Demo Course")))
+            self.assertTrue(os.path.isdir(os.path.join(tmp, "Week 1 - Introduction to AI")))
+            self.assertNotIn("DEMO101-2627-S1-Demo Course", os.listdir(tmp))
 
     def test_missing_snapshot_reports_error(self):
         result = self._post({"snapshot": "Z:/does/not/exist.mhtml"})

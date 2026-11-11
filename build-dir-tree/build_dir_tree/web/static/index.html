@@ -33,15 +33,21 @@
 
   <section class="card">
     <h2>2. 输出位置</h2>
-    <div class="picker">
-      <button id="browseOut" class="ghost">选择输出目录…</button>
-      <span id="outInfo" class="scan-info"></span>
+
+    <div class="field">
+      <label for="output">输出目录（目录树直接建在这里）</label>
+      <div class="manual-row">
+        <input id="output" type="text" placeholder="留空则按下面的默认规则" autocomplete="off">
+        <button id="browseOut" class="ghost">选择…</button>
+      </div>
+      <div id="defaultHint" class="hint-inline"></div>
     </div>
-    <div class="manual-row">
-      <input id="output" type="text" placeholder="输出根目录，例如 D:\Courses" autocomplete="off">
-    </div>
-    <div class="manual-row">
-      <input id="rootName" type="text" placeholder="顶层文件夹名（留空自动取课程标题）" autocomplete="off">
+
+    <label class="inline"><input id="createRoot" type="checkbox"> 额外加一层课程名文件夹</label>
+
+    <div class="field" id="rootNameField" hidden>
+      <label for="rootName">这一层文件夹的名字（留空自动取课程标题）</label>
+      <input id="rootName" type="text" placeholder="留空自动生成" autocomplete="off">
     </div>
   </section>
 

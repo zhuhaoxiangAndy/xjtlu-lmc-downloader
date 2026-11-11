@@ -137,7 +137,47 @@ Layout=sections  Dirs=23  Root=ISA104-2627-S1-AI Application Design
 
 ```bash
 python -m build_dir_tree course.mhtml --layout sections --mkdir -o "D:\Courses"
+
+# 想在输出目录里再套一层课程名文件夹
+python -m build_dir_tree course.mhtml --layout sections --mkdir --with-root -o "D:\Courses"
 ```
+
+## 输出位置与顶层文件夹
+
+### 默认不套顶层文件夹
+
+目录树**直接建在输出目录里**。例如输出目录是 `D:\Courses`，建出来就是：
+
+```
+D:\Courses\
+├── Welcome to ISA104 - AI Application Design!\
+├── AIAT Faculty\
+├── Week 1 - Introduction to AI and GAI\
+└── ...
+```
+
+想要多一层课程名文件夹，加 `--with-root`（或 `--root-name 自定义名字`）：
+
+```
+D:\Courses\ISA104-2627-S1-AI Application Design\
+├── Welcome to ISA104 - AI Application Design!\
+└── ...
+```
+
+### 默认输出目录
+
+不给 `-o` 时按下面的顺序决定：
+
+| 情况 | 结果 |
+|---|---|
+| 当前工作目录是一个正常的工作目录 | 就用当前目录 |
+| 当前目录是用户主目录、磁盘根目录、或系统目录 | `<文档>\LMC\<课程名>` |
+
+`<文档>` **不是**简单拼 `~/Documents`。Windows 允许把「文档」重定向到别的磁盘，
+所以这里调用系统接口 `SHGetKnownFolderPath` 查询真实位置。
+比如本机的文档目录实际在 `D:\Documents`，而不是 `C:\Users\<用户>\Documents`。
+
+查不到时依次回退 `~/Documents`、`~/文档`、用户主目录，保证总能拿到一个存在的路径。
 
 ## 两种布局
 
@@ -248,7 +288,10 @@ python -m build_dir_tree.ui --port 8777 --no-browser
 2. 点一个快照 —— 整棵目录树出现，默认全部勾选。
 3. 调整命名选项（可选）—— 加序号、合并空格、指定替换字符，改完点「重新载入」。
 4. 勾选要创建的目录 —— 章节可整块勾选，也可只勾个别活动。
-5. 选输出目录，点「创建选中目录」—— 只创建勾上的那些。
+5. 选输出目录（留空则按上面的默认规则），点「创建选中目录」—— 只创建勾上的那些。
+
+输出区会直接写出「默认会建在：<路径>」，并在下方显示「文档」目录的真实位置。
+勾选「额外加一层课程名文件夹」才多套一层，**默认不套**。
 
 ### 树的交互
 
@@ -450,7 +493,9 @@ options:
   --layout {sections,full}
                         sections = 章节骨架（默认）；full = 另加每个活动的叶子目录
   --root-name NAME      顶层文件夹名（默认取课程标题）
-  --mkdir               真正创建目录
+  --mkdir               真正创建目录（不给 -o 时用默认输出目录）
+  --with-root           额外套一层课程名文件夹（默认不套）
+  --root-name NAME      这一层文件夹的名字，隐含 --with-root
   --dry-run             只打印（不给 --mkdir 时的默认行为）
   --summary             只打印统计后退出
   --json FILE           把完整规格写成 JSON
@@ -510,7 +555,7 @@ spec = course.to_spec(layout="full", policy=policy)
 python -m unittest discover -s tests -t . -v
 ```
 
-86 个用例覆盖：保真命名（单/双/三空格、括号、方括号、`&`、Unicode、双重转义实体）、
+95 个用例覆盖：保真命名（单/双/三空格、括号、方括号、`&`、Unicode、双重转义实体）、
 每个加工选项（序号、压缩空格、空格替换、非法字符替换、保留尾随）、章节/子章节父子关系、
 subsection 占位过滤、两种布局、重名去重、CLI 四条输出路径、路径长度告警、保真度告警、
 树结构构建、勾选解析（整块选中、单叶选中补父目录、排除子树）、文件夹扫描

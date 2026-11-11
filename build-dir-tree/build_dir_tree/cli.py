@@ -25,6 +25,7 @@ import sys
 from typing import Any, Dict, List, Optional
 
 from .course_parser import Course, NamePolicy, ParseError, apply_name_policy, parse_bytes
+from .locations import suggest_output_dir
 
 __all__ = ["main", "build_parser"]
 
@@ -103,11 +104,6 @@ def build_parser() -> argparse.ArgumentParser:
         default="sections",
         help="sections = chapter skeleton (default); full = also one leaf per activity",
     )
-    p.add_argument(
-        "--root-name",
-        default=None,
-        help="Name of the top-level folder to create inside --output (default: derived from the course title)",
-    )
     p.add_argument("--mkdir", action="store_true", help="Actually create the directories")
     p.add_argument("--dry-run", action="store_true", help="Print what would be created (default when --mkdir is absent)")
     p.add_argument("--summary", action="store_true", help="Print only course statistics and exit")
@@ -144,6 +140,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--keep-trailing",
         action="store_true",
         help="Do not strip trailing dots/spaces (Windows will drop them anyway)",
+    )
+    p.add_argument(
+        "--with-root",
+        action="store_true",
+        help="Wrap the tree in a top-level folder named after the course (default: no wrapper)",
+    )
+    p.add_argument(
+        "--root-name",
+        default=None,
+        help="Name for the top-level folder; implies --with-root",
     )
     p.add_argument("--version", action="store_true", help="Print the version and exit")
     p.add_argument("-q", "--quiet", action="store_true", help="Only emit errors")
@@ -301,9 +307,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
 
     if not args.output:
-        raise SystemExit("error: --mkdir requires -o/--output")
+        args.output = suggest_output_dir(_default_root_name(course))
+        if not args.quiet:
+            print("未指定 -o，使用默认目录：%s" % args.output)
 
-    root = os.path.join(args.output, root_name)
+    # A wrapper folder is opt-in; the default writes the tree straight into
+    # the output directory.
+    use_root = bool(args.with_root or args.root_name)
+    root = os.path.join(args.output, root_name) if use_root else args.output
+
     for line in _fidelity_warnings(spec, root) + _path_length_warnings(spec, root):
         if not args.quiet:
             print(line, file=sys.stderr)
@@ -316,6 +328,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if not args.quiet:
         print("Created/verified %d directories under %s (new: %d)" % (spec["count"], root, created))
     return 0
+
 
 
 if __name__ == "__main__":  # pragma: no cover
