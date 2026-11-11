@@ -29,14 +29,30 @@
 `No module named build_dir_tree`。三选一：
 
 > **三个常见误区**，先看这段能省一次报错：
-> 1. 克隆下来不等于装好了 —— `pip install -e .` 这一步不能跳。
+> 1. 克隆下来不等于装好了 —— `pip install .` 这一步不能跳。
 > 2. `cd` 要进 **`build-dir-tree`** 这个子目录，不是仓库根目录。
 > 3. `ls` / `pwsh` 在 `cmd.exe` 里并不存在，要先敲 `powershell`。
 
-### 方式 A：可编辑安装（推荐，装一次即可）
+### 方式 A：普通安装（推荐，装一次即可，之后可以随便移动代码目录）
 
 ```bash
 git clone https://github.com/zhuhaoxiangAndy/xjtlu-lmc-downloader.git
+cd xjtlu-lmc-downloader/build-dir-tree
+python -m pip install .
+```
+
+注意是 `pip install .`，**不要**加 `-e`。加了 `-e` 是「可编辑安装」，它只记录源目录路径；
+你一旦移动或重命名那个目录，`import build_dir_tree` 立刻失效，报
+`No module named build_dir_tree`。普通安装会把代码复制进 Python 环境，与源目录无关。
+
+> 如果你已经用 `-e` 装过又移动了目录：
+> `python -m pip uninstall -y build-dir-tree`，然后在新的目录里 `python -m pip install .`。
+
+### 方式 A2：可编辑安装（要改代码时用）
+
+想在仓库里改代码并即时生效，才用这个。代价是**不能移动那个目录**：
+
+```bash
 cd xjtlu-lmc-downloader/build-dir-tree
 python -m pip install -e .
 ```
