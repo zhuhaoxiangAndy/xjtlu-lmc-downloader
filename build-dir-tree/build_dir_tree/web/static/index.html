@@ -25,13 +25,10 @@
 
     <div id="found" class="found"></div>
 
-    <details class="manual">
-      <summary>或手动输入路径</summary>
-      <label>课程页快照路径（.mhtml / .html）
-        <input id="snapshot" type="text" placeholder="D:\Downloads\Course.mhtml" autocomplete="off">
-      </label>
+    <div class="manual-row">
+      <input id="snapshot" type="text" placeholder="也可以直接粘贴完整路径，或点上面的「选择课程快照…」" autocomplete="off">
       <button id="load">载入</button>
-    </details>
+    </div>
   </section>
 
   <section class="card">
@@ -40,12 +37,12 @@
       <button id="browseOut" class="ghost">选择输出目录…</button>
       <span id="outInfo" class="scan-info"></span>
     </div>
-    <label>输出根目录（点「创建选中目录」时使用）
-      <input id="output" type="text" placeholder="D:\Courses" autocomplete="off">
-    </label>
-    <label>顶层文件夹名（留空自动取课程标题）
-      <input id="rootName" type="text" placeholder="留空自动生成" autocomplete="off">
-    </label>
+    <div class="manual-row">
+      <input id="output" type="text" placeholder="输出根目录，例如 D:\Courses" autocomplete="off">
+    </div>
+    <div class="manual-row">
+      <input id="rootName" type="text" placeholder="顶层文件夹名（留空自动取课程标题）" autocomplete="off">
+    </div>
   </section>
 
   <section class="card">
@@ -56,16 +53,14 @@
     <label class="inline"><input id="collapseSpaces" type="checkbox"> 合并连续空格</label>
     <label class="inline"><input id="dropTrailing" type="checkbox" checked> 去掉末尾空格和点</label>
 
-    <div class="row">
-      <label>空格替换为（留空 = 保持原样）
-        <input id="spaceReplace" type="text" placeholder="留空则保留空格" autocomplete="off">
-      </label>
+    <div class="field">
+      <label for="spaceReplace">空格替换为（留空 = 保持原样）</label>
+      <input id="spaceReplace" type="text" placeholder="留空则保留空格" autocomplete="off">
     </div>
 
-    <div class="row">
-      <label>非法字符替换为（留空 = 直接删除，默认）
-        <input id="illegalReplace" type="text" placeholder="留空则删除 &lt; &gt; : &quot; / \ | ? *" autocomplete="off">
-      </label>
+    <div class="field">
+      <label for="illegalReplace">非法字符替换为（留空 = 直接删除，默认）</label>
+      <input id="illegalReplace" type="text" placeholder="留空则删除 &lt; &gt; : &quot; / \ | ? *" autocomplete="off">
     </div>
 
     <button id="reload">重新载入</button>

@@ -4,6 +4,11 @@ Tkinter owns its event loop and is not safe to drive from the HTTP server
 threads, so each dialog runs in its own short-lived process and reports the
 chosen path on stdout as JSON.
 
+DPI: Windows scales a DPI-unaware process, so the dialog renders blurry and
+its layout shifts when the shell redraws (for example after "New folder").
+Declaring per-monitor DPI awareness *before* Tk starts makes the dialog crisp
+and keeps its geometry stable.
+
 Usage (internal):
     python -m build_dir_tree.web.dialogs file  [--initial DIR]
     python -m build_dir_tree.web.dialogs dir   [--initial DIR]
@@ -18,14 +23,41 @@ import traceback
 from typing import Any, Dict, List, Optional
 
 
+def _enable_dpi_awareness() -> None:
+    """Opt this process into per-monitor DPI awareness before Tk initialises.
+
+    Must run first: once Tk has created a window, Windows has already decided
+    the scaling mode and the setting no longer takes effect. Every failure is
+    ignored -- a blurry dialog is better than no dialog.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        # PROCESS_PER_MONITOR_DPI_AWARE = 2 (Windows 8.1+)
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        return
+    except Exception:
+        pass
+    try:
+        import ctypes
+
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
+
+
 def _pick(kind: str, initial: str) -> Dict[str, Any]:
+    _enable_dpi_awareness()
+
     import tkinter as tk
     from tkinter import filedialog
 
     root = tk.Tk()
     root.withdraw()
     root.attributes("-topmost", True)
-    root.update()
+    root.update_idletasks()
 
     try:
         if kind == "dir":
@@ -42,12 +74,16 @@ def _pick(kind: str, initial: str) -> Dict[str, Any]:
                 initialdir=initial or None,
                 filetypes=[
                     ("Moodle 页面快照", "*.mhtml"),
-                    ("HTML 文件", "*.html *.htm"),
+                    ("HTML 文件", "*.html"),
+                    ("HTML 文件", "*.htm"),
                     ("全部文件", "*.*"),
                 ],
             )
     finally:
-        root.destroy()
+        try:
+            root.destroy()
+        except Exception:
+            pass
 
     return {"ok": bool(picked), "path": picked or ""}
 
@@ -60,7 +96,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     try:
         result = _pick(args.kind, args.initial)
-    except Exception as exc:  # no display, missing tkinter, etc.
+    except Exception as exc:
         result = {
             "ok": False,
             "path": "",

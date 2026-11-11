@@ -51,7 +51,10 @@ function renderFound(directory, files) {
   host.textContent = "";
   $("scanInfo").textContent = directory || "";
   if (!files || !files.length) {
-    host.innerHTML = '<div class="empty">这个目录里没有找到 .mhtml / .html 快照。换个目录试试。</div>';
+    host.innerHTML =
+      '<div class="empty">这个目录里没有找到 .mhtml / .html 快照。<br>' +
+      '<b>下一步：</b>点「换个目录查找…」挑一个文件夹，' +
+      '或点「选择课程快照…」直接指定文件。</div>';
     return;
   }
   const list = document.createElement("ul");
@@ -64,9 +67,14 @@ function renderFound(directory, files) {
     btn.innerHTML =
       '<span class="fname"></span><span class="fmeta">' + humanSize(file.size) + "</span>";
     btn.querySelector(".fname").textContent = file.name;
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", async () => {
+      for (const other of host.querySelectorAll(".found-item")) {
+        other.classList.remove("active");
+      }
+      btn.classList.add("active");
       $("snapshot").value = file.path;
-      loadTree(false);
+      setStatus("正在载入 " + file.name + " …");
+      await loadTree(false, file.path);
     });
     li.appendChild(btn);
     list.appendChild(li);
@@ -123,7 +131,10 @@ function renderTree() {
   const host = $("tree");
   host.textContent = "";
   if (!treeData.length) {
-    host.innerHTML = '<div class="empty">还没有载入课程。点上面的「选择课程快照…」。</div>';
+    host.innerHTML =
+      '<div class="empty">还没有载入课程。<br>' +
+      '<b>下一步：</b>在上方「1. 选择快照」里点一个文件名，' +
+      '或点「选择课程快照…」按钮挑文件。</div>';
     $("countLabel").textContent = "";
     return;
   }
@@ -213,6 +224,10 @@ async function loadTree(keepSelection, snapshotPath) {
     renderTree();
     setStatus(`已载入 ${allIds.length} 个目录`, "ok");
     $("out").textContent = "";
+    const treeCard = document.getElementById("tree");
+    if (treeCard && treeCard.scrollIntoView) {
+      treeCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
   } catch (err) {
     setStatus("请求失败：" + err.message, "err");
   }

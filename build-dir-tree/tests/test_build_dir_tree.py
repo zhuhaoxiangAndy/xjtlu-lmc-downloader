@@ -502,6 +502,33 @@ class TestScanAndDialogs(unittest.TestCase):
         self.assertIn("file", proc.stdout)
 
 
+class TestDialogDPI(unittest.TestCase):
+    """The picker must declare DPI awareness before Tk starts."""
+
+    def test_awareness_helper_is_callable(self):
+        from build_dir_tree.web.dialogs import _enable_dpi_awareness
+
+        _enable_dpi_awareness()  # must never raise, even off Windows
+
+    def test_dpi_awareness_reaches_per_monitor(self):
+        import ctypes
+        import sys
+
+        if sys.platform != "win32":
+            self.skipTest("Windows only")
+
+        from build_dir_tree.web.dialogs import _enable_dpi_awareness
+
+        _enable_dpi_awareness()
+        awareness = ctypes.c_int()
+        try:
+            ctypes.windll.shcore.GetProcessDpiAwareness(None, ctypes.byref(awareness))
+        except Exception:
+            self.skipTest("shcore unavailable")
+        # 2 == PROCESS_PER_MONITOR_DPI_AWARE
+        self.assertEqual(awareness.value, 2)
+
+
 class TestEntryPoints(unittest.TestCase):
     """The user-facing ways to run this must all work."""
 

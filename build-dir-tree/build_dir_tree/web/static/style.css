@@ -15,19 +15,32 @@ h2 { margin: 0 0 14px; font-size: 13px; color: var(--muted); font-weight: 600;
 .sub { margin: 6px 0 0; color: var(--muted); }
 main { max-width: 940px; margin: 0 auto; display: grid; gap: 16px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; }
-label { display: block; margin: 0 0 14px; }
-label:last-child { margin-bottom: 0; }
-label.inline { display: inline-flex; align-items: center; gap: 8px; margin: 0 20px 10px 0; }
+
+/* 所有输入框统一：块级、独占一行、与文字标签留出间距 */
 input[type=text] {
-  display: block; width: 100%; margin-top: 6px; padding: 9px 11px;
-  background: #0d1017; color: var(--text); border: 1px solid var(--line);
-  border-radius: 7px; font: 13px/1.4 ui-monospace, Consolas, monospace;
+  display: block; width: 100%; padding: 9px 11px;
+  background: #0d1017; color: var(--text);
+  border: 1px solid var(--line); border-radius: 7px;
+  font: 13px/1.4 ui-monospace, Consolas, monospace;
 }
 input[type=text]:focus { outline: none; border-color: var(--accent); }
 input[type=checkbox], input[type=radio] { accent-color: var(--accent); margin: 0; cursor: pointer; }
-.row { margin-bottom: 14px; }
+
+label.inline {
+  display: inline-flex; align-items: center; gap: 8px;
+  margin: 0 20px 12px 0; cursor: pointer;
+}
+.field { margin: 0 0 14px; }
+.field > label { display: block; margin-bottom: 6px; }
+
+/* 输入框 + 按钮并排 */
+.manual-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+.manual-row input[type=text] { flex: 1; min-width: 0; }
+.manual-row button { flex: 0 0 auto; white-space: nowrap; }
+
 .hint { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
 .actions { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+
 button {
   padding: 9px 18px; border-radius: 7px; border: 1px solid var(--line);
   background: #1e222b; color: var(--text); font-size: 13px; cursor: pointer;
@@ -37,6 +50,29 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 button.primary:hover { filter: brightness(1.08); }
 button.ghost { background: transparent; }
 button:disabled { opacity: .5; cursor: default; }
+
+/* 快照扫描区 */
+.picker { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.scan-info { color: var(--muted); font-size: 12px; font-family: ui-monospace, Consolas, monospace;
+             word-break: break-all; }
+.found { margin-bottom: 4px; }
+.found-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+
+/* 可点击的快照条目：整行都能点，悬停有明确反馈 */
+.found-item {
+  width: 100%; text-align: left; display: flex; gap: 12px; align-items: center;
+  padding: 10px 12px; background: #0d1017; border: 1px solid var(--line);
+  border-radius: 7px; cursor: pointer; color: var(--text);
+}
+.found-item:hover { border-color: var(--accent); background: #12161f; }
+.found-item:active { background: #0a0d13; }
+.found-item .fname {
+  flex: 1; min-width: 0; font: 12.5px/1.4 ui-monospace, Consolas, monospace;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.found-item .fmeta { color: var(--muted); font-size: 11.5px; flex: 0 0 auto; }
+
+/* 目录树 */
 .tree-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
 .tree-toolbar button { padding: 6px 12px; font-size: 12px; }
 .count { margin-left: auto; color: var(--muted); font-size: 13px; }
@@ -44,7 +80,14 @@ button:disabled { opacity: .5; cursor: default; }
   max-height: 520px; overflow: auto; background: #0d1017;
   border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
 }
-.empty { color: var(--muted); padding: 20px 4px; }
+
+/* 空状态：给出明确下一步，而不是一片空白 */
+.empty {
+  color: var(--muted); padding: 18px 16px; border: 1px dashed var(--line);
+  border-radius: 8px; background: #0d1017; font-size: 13px; line-height: 1.7;
+}
+.empty b { color: var(--text); font-weight: 600; }
+
 .node-list { list-style: none; margin: 0; padding-left: 18px; }
 .node-list.root { padding-left: 0; }
 .node-row { display: flex; align-items: center; gap: 6px; padding: 3px 2px; border-radius: 5px; }
@@ -65,6 +108,7 @@ button:disabled { opacity: .5; cursor: default; }
   background: #1e2634; color: #7f8ea8; font-size: 10.5px;
   font-family: ui-monospace, Consolas, monospace;
 }
+
 .status { font-size: 13px; min-height: 20px; margin-bottom: 8px; }
 .status.ok { color: var(--ok); }
 .status.err { color: var(--err); }
@@ -76,21 +120,9 @@ button:disabled { opacity: .5; cursor: default; }
   white-space: pre-wrap; word-break: break-all; color: #c9d1d9;
 }
 
-.picker { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
-.scan-info { color: var(--muted); font-size: 12px; font-family: ui-monospace, Consolas, monospace;
-             word-break: break-all; }
-.found { margin-bottom: 12px; }
-.found-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-.found-item {
-  width: 100%; text-align: left; display: flex; gap: 12px; align-items: center;
-  padding: 8px 12px; background: #0d1017; border: 1px solid var(--line);
-  border-radius: 7px; cursor: pointer; color: var(--text);
+/* 正在载入的那一条 */
+.found-item.active {
+  border-color: var(--accent);
+  background: #16203a;
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
-.found-item:hover { border-color: var(--accent); background: #12161f; }
-.found-item .fname {
-  flex: 1; font: 12.5px/1.4 ui-monospace, Consolas, monospace;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.found-item .fmeta { color: var(--muted); font-size: 11.5px; flex: 0 0 auto; }
-.manual { margin-top: 8px; }
-.manual summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-bottom: 10px; }
