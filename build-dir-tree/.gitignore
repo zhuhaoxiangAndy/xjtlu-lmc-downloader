@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+
+# 快照与产物不入库
+*.mhtml
+out/
+
+# 测试夹具是人工构造的 HTML，需要入库
+!tests/fixtures/*.html

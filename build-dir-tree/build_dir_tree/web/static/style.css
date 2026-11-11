@@ -1,0 +1,57 @@
+:root {
+  --bg: #0f1115;
+  --panel: #171a21;
+  --line: #2a2f3a;
+  --text: #e6e9ef;
+  --muted: #99a1b3;
+  --accent: #4c8dff;
+  --ok: #3fb950;
+  --err: #f85149;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 32px 20px 80px;
+  background: var(--bg); color: var(--text);
+  font: 14px/1.6 ui-sans-serif, system-ui, "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+header { max-width: 880px; margin: 0 auto 24px; }
+h1 { margin: 0; font-size: 22px; letter-spacing: .2px; }
+h2 { margin: 0 0 14px; font-size: 14px; color: var(--muted); font-weight: 600;
+     text-transform: uppercase; letter-spacing: .08em; }
+.sub { margin: 6px 0 0; color: var(--muted); }
+main { max-width: 880px; margin: 0 auto; display: grid; gap: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; }
+label { display: block; margin: 0 0 14px; }
+label:last-child { margin-bottom: 0; }
+label.inline { display: inline-flex; align-items: center; gap: 8px; margin: 0 20px 10px 0; }
+input[type=text] {
+  display: block; width: 100%; margin-top: 6px; padding: 9px 11px;
+  background: #0d1017; color: var(--text);
+  border: 1px solid var(--line); border-radius: 7px;
+  font: 13px/1.4 ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+input[type=text]:focus { outline: none; border-color: var(--accent); }
+input[type=checkbox], input[type=radio] { accent-color: var(--accent); margin: 0; }
+.radios { margin-bottom: 12px; }
+.row { margin-bottom: 14px; }
+.hint { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
+.actions { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+button {
+  padding: 9px 18px; border-radius: 7px; border: 1px solid var(--line);
+  background: #1e222b; color: var(--text); font-size: 13px; cursor: pointer;
+}
+button:hover { border-color: #3d4658; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+button.primary:hover { filter: brightness(1.08); }
+button.ghost { background: transparent; }
+button:disabled { opacity: .5; cursor: default; }
+.status { font-size: 13px; min-height: 20px; margin-bottom: 8px; }
+.status.ok { color: var(--ok); }
+.status.err { color: var(--err); }
+.summary { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+.tree {
+  margin: 0; padding: 14px 16px; max-height: 460px; overflow: auto;
+  background: #0d1017; border: 1px solid var(--line); border-radius: 8px;
+  font: 12.5px/1.55 ui-monospace, "Cascadia Code", Consolas, monospace;
+  white-space: pre-wrap; word-break: break-all; color: #c9d1d9;
+}

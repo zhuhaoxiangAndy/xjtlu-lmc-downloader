@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>build-dir-tree</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <h1>build-dir-tree</h1>
+  <p class="sub">从 LMC / Moodle 课程页快照还原目录树 · 默认逐字符保真</p>
+</header>
+
+<main>
+  <section class="card">
+    <h2>1. 快照</h2>
+    <label>课程页快照路径（.mhtml / .html）
+      <input id="snapshot" type="text" placeholder="D:\Downloads\Course.mhtml" autocomplete="off">
+    </label>
+    <label>输出根目录（勾选“创建目录”时使用）
+      <input id="output" type="text" placeholder="D:\Courses" autocomplete="off">
+    </label>
+    <label>顶层文件夹名（留空自动取课程标题）
+      <input id="rootName" type="text" placeholder="留空自动生成" autocomplete="off">
+    </label>
+  </section>
+
+  <section class="card">
+    <h2>2. 布局</h2>
+    <div class="radios">
+      <label class="inline"><input type="radio" name="layout" value="sections" checked> 章节骨架</label>
+      <label class="inline"><input type="radio" name="layout" value="full"> 章节 + 每个活动</label>
+    </div>
+    <label class="inline"><input id="skipEmpty" type="checkbox"> 跳过空子章节</label>
+  </section>
+
+  <section class="card">
+    <h2>3. 命名</h2>
+    <p class="hint">默认与 LMC 页面标题逐字符一致。下面的开关只在需要时打开。</p>
+
+    <label class="inline"><input id="number" type="checkbox"> 加序号前缀（04- / 04.16- / 01 ）</label>
+
+    <div class="row">
+      <label class="check-inline"><input id="collapseSpaces" type="checkbox"> 合并连续空格</label>
+    </div>
+
+    <div class="row">
+      <label>空格替换为（留空 = 保持原样）
+        <input id="spaceReplace" type="text" placeholder="留空则保留空格" autocomplete="off">
+      </label>
+    </div>
+
+    <div class="row">
+      <label>非法字符替换为（留空 = 直接删除，默认）
+        <input id="illegalReplace" type="text" placeholder="留空则删除 &lt; &gt; : &quot; / \ | ? *" autocomplete="off">
+      </label>
+    </div>
+
+    <label class="inline"><input id="dropTrailing" type="checkbox" checked> 去掉末尾空格和点（Windows 会强制丢弃）</label>
+  </section>
+
+  <section class="card">
+    <h2>4. 结果</h2>
+    <div class="actions">
+      <button id="preview" class="primary">预览</button>
+      <button id="create">创建目录</button>
+      <button id="copy" class="ghost">复制列表</button>
+    </div>
+    <div id="status" class="status"></div>
+    <div id="summary" class="summary"></div>
+    <pre id="tree" class="tree"></pre>
+  </section>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>
