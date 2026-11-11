@@ -28,6 +28,11 @@
 `python -m build_dir_tree` **必须先安装**（或让 Python 找得到这个包），否则会报
 `No module named build_dir_tree`。三选一：
 
+> **三个常见误区**，先看这段能省一次报错：
+> 1. 克隆下来不等于装好了 —— `pip install -e .` 这一步不能跳。
+> 2. `cd` 要进 **`build-dir-tree`** 这个子目录，不是仓库根目录。
+> 3. `ls` / `pwsh` 在 `cmd.exe` 里并不存在，要先敲 `powershell`。
+
 ### 方式 A：可编辑安装（推荐，装一次即可）
 
 ```bash
