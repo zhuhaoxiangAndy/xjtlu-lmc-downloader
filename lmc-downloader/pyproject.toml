@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lmc-downloader"
+version = "2.0.0"
+description = "Archive an XJTLU Learning Mall Core (Moodle) course with its original structure"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+keywords = ["moodle", "lmc", "xjtlu", "course", "downloader", "archive"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Education",
+    "Topic :: Utilities",
+]
+dependencies = []
+
+# No [project.scripts] on purpose, same reason as build-dir-tree: pip turns
+# console scripts into .exe stubs inside Scripts\, and Windows Defender
+# Application Control blocks those stubs outright. Use `python -m lmc_downloader`
+# or install the .cmd shim with `python -m lmc_downloader.shims`.
+
+[project.optional-dependencies]
+# build-dir-tree is needed only to read .mhtml snapshots offline; the live
+# course path works without it.
+snapshot = ["build-dir-tree>=1.7.0"]
+
+[tool.setuptools]
+packages = ["lmc_downloader"]
+
+[tool.setuptools.package-data]
+lmc_downloader = ["py.typed"]

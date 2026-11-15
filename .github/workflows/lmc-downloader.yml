@@ -1,0 +1,55 @@
+name: lmc-downloader
+
+on:
+  push:
+    paths:
+      - 'lmc-downloader/**'
+      - '.github/workflows/lmc-downloader.yml'
+  pull_request:
+    paths:
+      - 'lmc-downloader/**'
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ubuntu-24.04 still ships Python 3.8; ubuntu-latest (26.04) does not.
+          - os: ubuntu-24.04
+            python-version: '3.8'
+          - os: ubuntu-latest
+            python-version: '3.10'
+          - os: ubuntu-latest
+            python-version: '3.12'
+          - os: windows-latest
+            python-version: '3.8'
+          - os: windows-latest
+            python-version: '3.10'
+          - os: windows-latest
+            python-version: '3.12'
+    defaults:
+      run:
+        working-directory: lmc-downloader
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Compile check
+        run: python -m compileall -q lmc_downloader tests
+
+      # The suite runs offline against a fake HTTP layer, so there is no secret
+      # to configure and no course data involved.
+      - name: Unit tests
+        run: python -m unittest discover -s tests -t . -v
+
+      - name: CLI help is reachable
+        run: python -m lmc_downloader --help
+
+      - name: Package installs
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .
