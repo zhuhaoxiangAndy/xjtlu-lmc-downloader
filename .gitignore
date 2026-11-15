@@ -23,3 +23,8 @@ cookies*.txt
 # 系统
 .DS_Store
 Thumbs.db
+
+# 一次性取证与经验记录：只保留在本地，不入库
+recon/
+exp/
+handoff*.md
