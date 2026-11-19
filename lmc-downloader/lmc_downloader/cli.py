@@ -32,6 +32,7 @@ import json
 import logging
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 from typing import List, Optional
 
 from . import __version__
@@ -42,6 +43,19 @@ from .names import human_bytes
 from .session import CookieError, CookieStore, has_session_cookie, load_cookies
 
 DEFAULT_HOST = "core.xjtlu.edu.cn"
+
+
+#: 常见 MIME -> 扩展名，用于在 URL 与标题都没有后缀时判断类型。
+EXT_FOR_MIME = {
+    "video/mp4": "mp4",
+    "video/webm": "webm",
+    "video/quicktime": "mov",
+    "audio/mpeg": "mp3",
+    "application/pdf": "pdf",
+    "application/zip": "zip",
+    "text/html": "html",
+}
+
 OFFICE_EXTENSIONS = ("pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx")
 
 
@@ -222,11 +236,19 @@ def command_download(args) -> int:
                             ref=ref, status="link", message=ref.error or ""))
                         continue
 
-                    if allowed_ext:
-                        suffix = Path(ref.name).suffix.lower().lstrip(".")
-                        if suffix and suffix not in allowed_ext and ref.kind != "folder":
+                    if allowed_ext and ref.kind != "folder":
+                        # 扩展名要以真实下载地址与 MIME 为准：活动标题通常没有后缀
+                        # （例如「CW1 Submission Guide」指向 .mp4），只看 ref.name
+                        # 会漏掉视频，把它们一并下载下来。
+                        candidates = [
+                            Path(urlparse(ref.real_url or "").path).suffix.lower().lstrip("."),
+                            Path(ref.name).suffix.lower().lstrip("."),
+                            (EXT_FOR_MIME.get((ref.content_type or "").split(";")[0].strip().lower(), "")),
+                        ]
+                        found = [c for c in candidates if c]
+                        if found and not (set(found) & allowed_ext):
                             print("[%d/%d] skip  .%-5s %s"
-                                  % (index, len(targets), suffix, activity.name))
+                                  % (index, len(targets), found[0], activity.name))
                             continue
 
                     result = fetcher.fetch(ref)

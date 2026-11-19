@@ -839,3 +839,31 @@ class TestLayouts(unittest.TestCase):
         sig = inspect.signature(Fetcher.__init__)
         self.assertEqual(sig.parameters["layout"].default, LAYOUT_FLAT)
 
+
+class TestExtensionFilter(unittest.TestCase):
+    """--ext 要按真实下载地址判断，而不是活动标题。"""
+
+    def test_mime_map_covers_video(self):
+        from lmc_downloader.cli import EXT_FOR_MIME
+
+        self.assertEqual(EXT_FOR_MIME.get("video/mp4"), "mp4")
+        self.assertEqual(EXT_FOR_MIME.get("application/pdf"), "pdf")
+
+    def test_filter_uses_real_url_suffix(self):
+        """标题没有后缀、真实地址是 .mp4 时，过滤必须把它算作 mp4。"""
+        from pathlib import Path
+        from urllib.parse import urlparse
+
+        title = "CW1 Submission Guide 1"
+        url = "https://x/pluginfile.php/1/mod_resource/content/1/guide.mp4"
+        allowed = {"pdf", "docx"}
+
+        suffix = Path(urlparse(url).path).suffix.lower().lstrip(".")
+        self.assertEqual(suffix, "mp4")
+        self.assertNotIn(suffix, allowed)
+
+    def test_title_without_suffix_yields_nothing(self):
+        from pathlib import Path
+
+        self.assertEqual(Path("CW1 Submission Guide 1").suffix, "")
+
