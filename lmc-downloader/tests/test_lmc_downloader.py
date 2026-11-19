@@ -379,7 +379,7 @@ class TestFetcher(unittest.TestCase):
             ref = self._ref()
             client = FakeClient({
                 ref.real_url: file_response(ref.real_url, b"hello world", "a.pdf")})
-            fetcher = Fetcher(client, root=root)
+            fetcher = Fetcher(client, root=root, layout="mirror")
             result = fetcher.fetch(ref)
             self.assertEqual(result.status, "downloaded")
             self.assertEqual(Path(result.path).read_bytes(), b"hello world")
@@ -395,11 +395,11 @@ class TestFetcher(unittest.TestCase):
             ref = self._ref()
             client = FakeClient({
                 ref.real_url: file_response(ref.real_url, b"data", "a.pdf")})
-            first = Fetcher(client, root=root)
+            first = Fetcher(client, root=root, layout="mirror")
             first.fetch(ref)
             first.manifest.save()
 
-            second = Fetcher(client, root=root)
+            second = Fetcher(client, root=root, layout="mirror")
             result = second.fetch(ref)
             self.assertEqual(result.status, "skipped")
             self.assertIn("unchanged", result.message)
@@ -411,14 +411,14 @@ class TestFetcher(unittest.TestCase):
             ref = self._ref()
             client = FakeClient({
                 ref.real_url: file_response(ref.real_url, b"v1", "a.pdf")})
-            fetcher = Fetcher(client, root=root)
+            fetcher = Fetcher(client, root=root, layout="mirror")
             fetcher.fetch(ref)
             fetcher.manifest.save()
 
             client.routes[ref.real_url] = file_response(ref.real_url, b"v2 longer", "a.pdf")
             # The crawler reports the remote size; a change must force a re-fetch.
             ref.size = len(b"v2 longer")
-            second = Fetcher(client, root=root)
+            second = Fetcher(client, root=root, layout="mirror")
             result = second.fetch(ref)
             self.assertEqual(result.status, "downloaded")
             self.assertGreaterEqual(len(client.downloads), 2)
@@ -429,7 +429,7 @@ class TestFetcher(unittest.TestCase):
             client = FakeClient({})
             url = "https://h/file/same.pdf"
             client.routes[url] = file_response(url, b"identical", "same.pdf")
-            fetcher = Fetcher(client, root=root, dedupe=True)
+            fetcher = Fetcher(client, root=root, dedupe=True, layout="mirror")
             first = fetcher.fetch(self._ref(activity="A", url=url))
             second = fetcher.fetch(self._ref(activity="B", url=url))
             self.assertEqual(first.status, "downloaded")
@@ -442,7 +442,7 @@ class TestFetcher(unittest.TestCase):
             root = Path(tmp) / "course"
             url = "https://h/file/same.pdf"
             client = FakeClient({url: file_response(url, b"identical", "same.pdf")})
-            fetcher = Fetcher(client, root=root, dedupe=False)
+            fetcher = Fetcher(client, root=root, dedupe=False, layout="mirror")
             first = fetcher.fetch(self._ref(activity="A", url=url))
             second = fetcher.fetch(self._ref(activity="B", url=url))
             self.assertEqual(first.status, "downloaded")
@@ -453,7 +453,7 @@ class TestFetcher(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "course"
             ref = self._ref(url="https://h/missing.pdf")
-            fetcher = Fetcher(FakeClient({}), root=root)
+            fetcher = Fetcher(FakeClient({}), root=root, layout="mirror")
             result = fetcher.fetch(ref)
             self.assertEqual(result.status, "failed")
             self.assertIn("404", result.message)
@@ -466,7 +466,7 @@ class TestFetcher(unittest.TestCase):
             target = root / "Week 1" / "Lecture" / "a.pdf"
             target.parent.mkdir(parents=True)
             target.write_bytes(b"already here")
-            fetcher = Fetcher(FakeClient({}), root=root)
+            fetcher = Fetcher(FakeClient({}), root=root, layout="mirror")
             adopted = fetcher.adopt_existing(ref)
             self.assertIsNotNone(adopted)
             self.assertEqual(adopted.status, "adopted")
@@ -626,7 +626,7 @@ class TestCli(unittest.TestCase):
             with mock.patch.object(cli, "HttpClient", fake), \
                     mock.patch("sys.stdout", io.StringIO()):
                 code = cli.main(["download", "1213", "--cookies", "MoodleSession=x",
-                                 "--root", str(root)])
+                                 "--root", str(root), "--layout", "mirror"])
             self.assertEqual(code, 0)
             self.assertTrue((root / "Week 1" / "Lecture 1" / "l1.pdf").is_file())
             self.assertTrue((root / "manifest.json").is_file())
@@ -799,4 +799,43 @@ class TestWebPagesBecomeMhtml(unittest.TestCase):
             b"%PDF-1.4 logintoken",
         )
         self.assertFalse(looks_like_login_page(pdf))
+
+
+class TestLayouts(unittest.TestCase):
+    """三种文件放置方式：单文件活动不该多套一层目录。"""
+
+    def test_mirror_always_keeps_activity_dir(self):
+        from lmc_downloader.names import activity_dir_needed, LAYOUT_MIRROR
+
+        self.assertTrue(activity_dir_needed("resource", 1, LAYOUT_MIRROR))
+        self.assertTrue(activity_dir_needed("folder", 3, LAYOUT_MIRROR))
+
+    def test_files_flat_single_file_has_no_dir(self):
+        from lmc_downloader.names import activity_dir_needed, LAYOUT_FLAT
+
+        self.assertFalse(activity_dir_needed("resource", 1, LAYOUT_FLAT))
+        self.assertTrue(activity_dir_needed("resource", 3, LAYOUT_FLAT))
+        self.assertTrue(activity_dir_needed("folder", 1, LAYOUT_FLAT))
+
+    def test_link_name_single_file_has_no_dir(self):
+        from lmc_downloader.names import activity_dir_needed, LAYOUT_LINK
+
+        self.assertFalse(activity_dir_needed("resource", 1, LAYOUT_LINK))
+        self.assertTrue(activity_dir_needed("folder", 2, LAYOUT_LINK))
+
+    def test_link_name_takes_activity_title(self):
+        from lmc_downloader.names import link_name
+
+        self.assertEqual(link_name("Lab4 - SELECT", "random.docx"), "Lab4 - SELECT.docx")
+        self.assertEqual(link_name("Week 4", "x.pdf"), "Week 4.pdf")
+        self.assertEqual(link_name("Page", "a.html", is_web=True), "Page.mhtml")
+
+    def test_layout_defaults_to_files_flat(self):
+        from lmc_downloader.fetcher import Fetcher
+        from lmc_downloader.names import LAYOUT_FLAT
+
+        import inspect
+
+        sig = inspect.signature(Fetcher.__init__)
+        self.assertEqual(sig.parameters["layout"].default, LAYOUT_FLAT)
 

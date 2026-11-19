@@ -215,3 +215,47 @@ def human_bytes(count: int) -> str:
 def manifest_key(section: str, activity: str, name: str) -> str:
     """Stable identity for one item inside a manifest."""
     return "/".join(split_parts(section) + [sanitize_name(activity) or "", name])
+
+
+#: 一个活动对应一个文件时，文件放在哪里。
+#:
+#: layout 决定活动小目录是否保留：
+#:   files-flat  格式2：文件直接放进章节目录，不建活动小目录
+#:   link-name   格式3：只保留章节目录，文件名 = 活动标题 + 原扩展名
+#:   mirror      格式1：每个活动一个同名小目录（默认，保持旧行为）
+LAYOUT_FLAT = "files-flat"
+LAYOUT_LINK = "link-name"
+LAYOUT_MIRROR = "mirror"
+
+LAYOUTS = (LAYOUT_FLAT, LAYOUT_LINK, LAYOUT_MIRROR)
+
+
+def activity_dir_needed(kind: str, file_count: int, layout: str) -> bool:
+    """这个活动是否需要单独的小目录。
+
+    A folder module always keeps one, because it holds many files by nature.
+    A single-file activity only needs one in ``mirror`` layout.
+    """
+    # 一个 folder 模块本身就装很多文件，任何布局都保留目录
+    if kind == "folder":
+        return True
+    if layout == LAYOUT_MIRROR:
+        return True
+    # link 布局：文件名已带活动标题，单文件活动不需要小目录
+    if layout == LAYOUT_LINK:
+        return file_count > 1
+    # flat 布局：多文件活动仍要目录，单文件不要
+    return file_count > 1
+
+
+def link_name(activity: str, filename: str, is_web: bool = False) -> str:
+    """格式3的文件名：活动标题 + 原文件的扩展名。
+
+    这样文件本身就说明了它属于哪个活动，不必再套一层同名目录。
+    """
+    suffix = Path(filename).suffix
+    stem = sanitize_name(activity) or Path(filename).stem
+    if is_web and suffix.lower() in HTML_SUFFIXES:
+        suffix = ".mhtml"
+    return stem + suffix if suffix else stem
+

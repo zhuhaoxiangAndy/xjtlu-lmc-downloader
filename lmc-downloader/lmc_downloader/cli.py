@@ -83,6 +83,14 @@ def _build_parser() -> argparse.ArgumentParser:
                           help="activity types to resolve (default: %(default)s)")
     download.add_argument("--dry-run", action="store_true",
                           help="resolve and report, write nothing")
+    download.add_argument(
+        "--layout",
+        choices=("files-flat", "link-name", "mirror"),
+        default="files-flat",
+        help="how a single-file activity is stored: files-flat = file directly "
+             "in the chapter folder; link-name = file named after the activity, "
+             "no extra folder; mirror = one folder per activity",
+    )
     download.add_argument("--no-dedupe", action="store_true",
                           help="keep a separate copy per activity even when the "
                                "underlying upload is identical")
@@ -183,6 +191,7 @@ def command_download(args) -> int:
             client,
             root=root,
             dedupe=not args.no_dedupe,
+        layout=args.layout,
             dry_run=args.dry_run,
         )
         fetcher.manifest.course_id = outline.course_id

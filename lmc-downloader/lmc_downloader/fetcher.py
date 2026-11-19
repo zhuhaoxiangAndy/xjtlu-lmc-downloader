@@ -37,7 +37,18 @@ from typing import Dict, Iterable, List, Optional
 
 from .crawler import FileRef
 from .http import HttpClient, HttpError, SessionExpired
-from .names import as_mhtml, choose_filename, human_bytes, sanitize_name, unique_path
+from .names import (
+    LAYOUT_FLAT,
+    LAYOUT_LINK,
+    LAYOUT_MIRROR,
+    activity_dir_needed,
+    as_mhtml,
+    choose_filename,
+    human_bytes,
+    link_name,
+    sanitize_name,
+    unique_path,
+)
 
 LOGGER = logging.getLogger("lmc_downloader.fetcher")
 
@@ -195,12 +206,14 @@ class Fetcher:
         root: Path,
         dedupe: bool = True,
         overwrite: bool = False,
+        layout: str = LAYOUT_FLAT,
         dry_run: bool = False,
     ) -> None:
         self.client = client
         self.root = Path(root)
         self.dedupe = dedupe
         self.overwrite = overwrite
+        self.layout = layout
         self.dry_run = dry_run
         # Load whatever a previous run left behind, otherwise "incremental"
         # is a lie: a fresh Fetcher would re-download everything.
@@ -212,10 +225,31 @@ class Fetcher:
         }
 
     # -- helpers ------------------------------------------------------------
-    def target_dir(self, ref: FileRef) -> Path:
-        parts = [sanitize_name(p) for p in (ref.section, ref.activity) if p]
+    def target_dir(self, ref: FileRef, file_count: int = 1) -> Path:
+        """活动对应的目标目录。
+
+        ``layout`` 决定是否保留活动小目录：
+          mirror    -> 章节/活动        （每个活动一层，旧行为）
+          files-flat-> 章节/            （单文件活动直接放章节里）
+          link-name -> 章节/            （文件名带活动标题）
+        """
+        parts = [sanitize_name(ref.section)] if ref.section else []
+        if activity_dir_needed(ref.kind, file_count, self.layout):
+            if ref.activity:
+                parts.append(sanitize_name(ref.activity))
         parts = [p for p in parts if p]
         return self.root.joinpath(*parts) if parts else self.root
+
+    def _siblings(self, ref: FileRef) -> list:
+        """同一个活动下的文件列表，用于判断是否需要单独目录。
+
+        A ``folder`` module yields several refs; a ``resource`` yields one, unless
+        its viewer page embedded multiple links.
+        """
+        siblings = getattr(ref, "siblings", None)
+        if siblings:
+            return siblings
+        return [ref]
 
     def _existing_by_hash(self, digest: str) -> Optional[str]:
         return self._hashes.get(digest)
@@ -242,7 +276,7 @@ class Fetcher:
         name = choose_filename(
             None, ref.real_url, ref.name, ref.content_type
         )
-        directory = self.target_dir(ref)
+        directory = self.target_dir(ref, len(self._siblings(ref)))
         destination = directory / name
 
         if self.dry_run:
@@ -267,6 +301,11 @@ class Fetcher:
         # A web page is always stored as .mhtml so the browser opens it with its
         # assets inlined; the user asked for this explicitly.
         real_name = as_mhtml(real_name, response.content_type)
+        if self.layout == LAYOUT_LINK and ref.activity:
+            real_name = link_name(
+                ref.activity, real_name,
+                is_web=response.content_type in ("text/html", "application/xhtml+xml"),
+            )
         if real_name and real_name != destination.name:
             renamed = unique_path(directory, real_name)
             destination.replace(renamed)
@@ -294,7 +333,7 @@ class Fetcher:
     def adopt_existing(self, ref: FileRef) -> Optional[FetchResult]:
         """Record a file that already exists on disk but is missing from the manifest."""
         name = choose_filename(None, ref.real_url, ref.name, ref.content_type)
-        candidate = self.target_dir(ref) / name
+        candidate = self.target_dir(ref, 1) / name
         if not candidate.is_file():
             return None
         result = FetchResult(
