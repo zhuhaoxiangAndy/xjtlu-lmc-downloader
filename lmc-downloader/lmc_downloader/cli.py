@@ -56,7 +56,9 @@ EXT_FOR_MIME = {
     "text/html": "html",
 }
 
-OFFICE_EXTENSIONS = ("pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx")
+#: --ext office 的预设集合。含 mhtml：Moodle 的 page 模块与未解析出真实
+#: 文件的 resource 都以网页形式保存，用户明确要求网页一律存 .mhtml。
+OFFICE_EXTENSIONS = ("pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "mhtml")
 
 #: 视频类扩展名。默认不下载，由 --include-video 显式开启。
 VIDEO_EXTENSIONS = ("mp4", "mkv", "webm", "mov", "avi", "m4v", "flv", "wmv")

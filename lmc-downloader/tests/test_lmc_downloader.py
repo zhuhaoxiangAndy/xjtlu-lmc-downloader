@@ -901,3 +901,24 @@ class TestVideoOption(unittest.TestCase):
 
         self.assertNotIn("mp4", _wanted_extensions("", include_video=False))
 
+
+class TestOfficePresetIncludesMhtml(unittest.TestCase):
+    """office 预设必须含 mhtml：网页存档也是课程材料。"""
+
+    def test_office_preset_has_mhtml(self):
+        from lmc_downloader.cli import _wanted_extensions
+
+        self.assertIn("mhtml", _wanted_extensions("office"))
+
+    def test_office_preset_still_has_documents(self):
+        from lmc_downloader.cli import _wanted_extensions
+
+        result = _wanted_extensions("office")
+        for ext in ("pdf", "docx", "pptx"):
+            self.assertIn(ext, result)
+
+    def test_office_preset_still_excludes_video(self):
+        from lmc_downloader.cli import _wanted_extensions
+
+        self.assertNotIn("mp4", _wanted_extensions("office"))
+
