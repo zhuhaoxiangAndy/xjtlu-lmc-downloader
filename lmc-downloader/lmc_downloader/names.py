@@ -44,7 +44,9 @@ EXTENSION_BY_MIME = {
     "application/x-zip-compressed": ".zip",
     "text/plain": ".txt",
     "text/csv": ".csv",
-    "text/html": ".html",
+    # 用户要求：网页一律存成 .mhtml，便于浏览器原样打开
+    "text/html": ".mhtml",
+    "application/xhtml+xml": ".mhtml",
     "application/json": ".json",
     "image/png": ".png",
     "image/jpeg": ".jpg",
@@ -145,6 +147,26 @@ def extension_for_mime(content_type: Optional[str]) -> str:
         return ""
     mime = content_type.split(";")[0].strip().lower()
     return EXTENSION_BY_MIME.get(mime, "")
+
+
+HTML_SUFFIXES = (".html", ".htm", ".xhtml")
+
+
+def as_mhtml(name: str, content_type: Optional[str] = None) -> str:
+    """Turn a web-page filename into ``.mhtml``.
+
+    Two things reach this point as HTML: a Moodle ``page`` module, and a
+    ``resource`` whose viewer page could not be resolved to a real file. Both are
+    web pages, and the user asked for those to be stored as ``.mhtml`` so the
+    browser opens them with their assets inlined instead of as a bare document.
+    """
+    mime = (content_type or "").split(";")[0].strip().lower()
+    is_web = mime in ("text/html", "application/xhtml+xml")
+    suffix = Path(name).suffix.lower()
+    if not is_web and suffix not in HTML_SUFFIXES:
+        return name
+    stem = Path(name).stem if suffix else name
+    return (stem or "page") + ".mhtml"
 
 
 def choose_filename(

@@ -748,3 +748,55 @@ class TestSnapshot(unittest.TestCase):
         from lmc_downloader.snapshot import decode_snapshot
         text = decode_snapshot(b"\xef\xbb\xbf<html>hi</html>")
         self.assertIn("hi", text)
+
+
+class TestWebPagesBecomeMhtml(unittest.TestCase):
+    """网页一律存 .mhtml；登录页绝不落盘。"""
+
+    def test_html_mime_maps_to_mhtml(self):
+        from lmc_downloader.names import extension_for_mime
+
+        self.assertEqual(extension_for_mime("text/html"), ".mhtml")
+        self.assertEqual(extension_for_mime("application/xhtml+xml"), ".mhtml")
+
+    def test_as_mhtml_renames_html_suffix(self):
+        from lmc_downloader.names import as_mhtml
+
+        self.assertEqual(as_mhtml("page.html", "text/html"), "page.mhtml")
+        self.assertEqual(as_mhtml("page.htm", "text/html"), "page.mhtml")
+        self.assertEqual(as_mhtml("page", "text/html"), "page.mhtml")
+
+    def test_as_mhtml_leaves_real_files_alone(self):
+        from lmc_downloader.names import as_mhtml
+
+        self.assertEqual(as_mhtml("lecture.pdf", "application/pdf"), "lecture.pdf")
+        self.assertEqual(as_mhtml("lab.zip", "application/zip"), "lab.zip")
+        self.assertEqual(as_mhtml("code.java", None), "code.java")
+
+    def test_login_page_detected_by_body(self):
+        from lmc_downloader.http import looks_like_login_page, Response
+
+        login = Response(
+            "https://x/login/index.php", 200,
+            {"content-type": "text/html"},
+            b'<input name="logintoken" value="abc">',
+        )
+        self.assertTrue(looks_like_login_page(login))
+
+        page = Response(
+            "https://x/mod/page/view.php", 200,
+            {"content-type": "text/html"},
+            b"<html><body>course page</body></html>",
+        )
+        self.assertFalse(looks_like_login_page(page))
+
+    def test_pdf_never_treated_as_login(self):
+        from lmc_downloader.http import looks_like_login_page, Response
+
+        pdf = Response(
+            "https://x/a.pdf", 200,
+            {"content-type": "application/pdf"},
+            b"%PDF-1.4 logintoken",
+        )
+        self.assertFalse(looks_like_login_page(pdf))
+

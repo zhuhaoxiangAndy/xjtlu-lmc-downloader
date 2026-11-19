@@ -37,7 +37,7 @@ from typing import Dict, Iterable, List, Optional
 
 from .crawler import FileRef
 from .http import HttpClient, HttpError, SessionExpired
-from .names import choose_filename, human_bytes, sanitize_name, unique_path
+from .names import as_mhtml, choose_filename, human_bytes, sanitize_name, unique_path
 
 LOGGER = logging.getLogger("lmc_downloader.fetcher")
 
@@ -264,6 +264,9 @@ class Fetcher:
         real_name = choose_filename(
             response.content_disposition, response.url, ref.name, response.content_type
         )
+        # A web page is always stored as .mhtml so the browser opens it with its
+        # assets inlined; the user asked for this explicitly.
+        real_name = as_mhtml(real_name, response.content_type)
         if real_name and real_name != destination.name:
             renamed = unique_path(directory, real_name)
             destination.replace(renamed)

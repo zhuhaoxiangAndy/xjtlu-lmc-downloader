@@ -75,6 +75,30 @@ class Response:
         return self.content.decode(encoding, "replace")
 
 
+LOGIN_BODY_MARKERS = (
+    b'name="logintoken"',
+    b'id="login"',
+    b'action="/login/index.php"',
+    b"action=\"https://core.xjtlu.edu.cn/login/index.php\"",
+    b"Log in to the site",
+)
+
+
+def looks_like_login_page(response: "Response") -> bool:
+    """True when an HTML body is actually the Moodle login form.
+
+    A 302 to /login/ is caught by LOGIN_PATTERN, but Moodle sometimes returns the
+    login form with HTTP 200 on the original URL (for example when the session
+    expired between two requests).Without this check that page is saved as if it
+    were the file the user asked for, which is how whole courses ended up as
+    useless .html files.
+    """
+    if not response.is_html:
+        return False
+    body = response.content or b""
+    return any(marker in body for marker in LOGIN_BODY_MARKERS)
+
+
 def _origin(url: str) -> str:
     parsed = urllib.parse.urlparse(url)
     return "%s://%s" % (parsed.scheme, parsed.netloc)
@@ -248,8 +272,18 @@ class HttpClient:
                     raise SessionExpired(
                         "session expired: redirected to %s" % final_url)
                 headers = {k.lower(): v for k, v in response.headers.items()}
-                sample = response.read(512)
-                return Response(final_url, response.status, headers, sample)
+                # A whole page is needed when the target is an HTML viewer: the
+                # real file link sits tens of kilobytes in (a Moodle resource
+                # viewer puts it well past the 512-byte header prefix), so a
+                # short sample made every such resource look like a web page.
+                is_html = "text/html" in (headers.get("content-type") or "").lower()
+                sample = response.read() if is_html else response.read(512)
+                result = Response(final_url, response.status, headers, sample)
+            if looks_like_login_page(result):
+                raise SessionExpired(
+                    "session expired: %s returned the login form" % url
+                )
+            return result
         except SessionExpired:
             raise
         except urllib.error.HTTPError as exc:
