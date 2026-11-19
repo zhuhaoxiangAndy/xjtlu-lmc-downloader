@@ -867,3 +867,37 @@ class TestExtensionFilter(unittest.TestCase):
 
         self.assertEqual(Path("CW1 Submission Guide 1").suffix, "")
 
+
+class TestVideoOption(unittest.TestCase):
+    """视频默认不下载，必须 --include-video 显式开启。"""
+
+    def test_video_extensions_defined(self):
+        from lmc_downloader.cli import VIDEO_EXTENSIONS
+
+        for ext in ("mp4", "mkv", "webm", "mov"):
+            self.assertIn(ext, VIDEO_EXTENSIONS)
+
+    def test_office_preset_excludes_video(self):
+        from lmc_downloader.cli import _wanted_extensions
+
+        result = _wanted_extensions("office", include_video=False)
+        self.assertNotIn("mp4", result)
+        self.assertIn("pdf", result)
+
+    def test_include_video_adds_mp4(self):
+        from lmc_downloader.cli import _wanted_extensions
+
+        result = _wanted_extensions("office", include_video=True)
+        self.assertIn("mp4", result)
+
+    def test_empty_spec_with_video_flag(self):
+        from lmc_downloader.cli import _wanted_extensions, VIDEO_EXTENSIONS
+
+        result = _wanted_extensions("", include_video=True)
+        self.assertEqual(result, set(VIDEO_EXTENSIONS))
+
+    def test_empty_spec_without_flag_has_no_video(self):
+        from lmc_downloader.cli import _wanted_extensions
+
+        self.assertNotIn("mp4", _wanted_extensions("", include_video=False))
+

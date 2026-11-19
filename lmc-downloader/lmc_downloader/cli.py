@@ -58,6 +58,9 @@ EXT_FOR_MIME = {
 
 OFFICE_EXTENSIONS = ("pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx")
 
+#: 视频类扩展名。默认不下载，由 --include-video 显式开启。
+VIDEO_EXTENSIONS = ("mp4", "mkv", "webm", "mov", "avi", "m4v", "flv", "wmv")
+
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -108,6 +111,12 @@ def _build_parser() -> argparse.ArgumentParser:
     download.add_argument("--no-dedupe", action="store_true",
                           help="keep a separate copy per activity even when the "
                                "underlying upload is identical")
+    download.add_argument(
+        "--include-video",
+        action="store_true",
+        help="also download video files (mp4/mkv/webm/mov/...). "
+             "Off by default so a course archive stays text-and-documents only.",
+    )
     download.add_argument("--limit", type=int, default=0,
                           help="stop after N downloadable items")
     download.add_argument("--manifest", default=None,
@@ -174,18 +183,27 @@ def command_outline(args) -> int:
     return 0
 
 
-def _wanted_extensions(spec: str) -> set:
+def _wanted_extensions(spec: str, include_video: bool = False) -> set:
+    """解析 --ext；视频只在 --include-video 时进入 allow-list。
+
+    spec 为空表示「不限类型」，但视频仍然默认排除——用户要求视频必须显式选择。
+    """
     if not spec:
-        return set()
-    if spec.strip().lower() == "office":
-        return set(OFFICE_EXTENSIONS)
-    return {item.strip().lower().lstrip(".") for item in spec.split(",") if item.strip()}
+        base = set()
+    elif spec.strip().lower() == "office":
+        base = set(OFFICE_EXTENSIONS)
+    else:
+        base = {item.strip().lower().lstrip(".") for item in spec.split(",") if item.strip()}
+
+    if include_video:
+        base |= set(VIDEO_EXTENSIONS)
+    return base
 
 
 def command_download(args) -> int:
     client = _make_client(args)
     wanted_types = {t.strip() for t in args.types.split(",") if t.strip()}
-    allowed_ext = _wanted_extensions(args.ext)
+    allowed_ext = _wanted_extensions(args.ext, include_video=args.include_video)
 
     root = Path(args.root) if args.root else Path.cwd() / "LMC" / str(args.course_id)
 
@@ -236,7 +254,7 @@ def command_download(args) -> int:
                             ref=ref, status="link", message=ref.error or ""))
                         continue
 
-                    if allowed_ext and ref.kind != "folder":
+                    if ref.kind != "folder":
                         # 扩展名要以真实下载地址与 MIME 为准：活动标题通常没有后缀
                         # （例如「CW1 Submission Guide」指向 .mp4），只看 ref.name
                         # 会漏掉视频，把它们一并下载下来。
@@ -246,9 +264,16 @@ def command_download(args) -> int:
                             (EXT_FOR_MIME.get((ref.content_type or "").split(";")[0].strip().lower(), "")),
                         ]
                         found = [c for c in candidates if c]
-                        if found and not (set(found) & allowed_ext):
-                            print("[%d/%d] skip  .%-5s %s"
-                                  % (index, len(targets), found[0], activity.name))
+                        reason = ""
+                        # 视频必须显式 --include-video，即便 --ext 为空也一样。
+                        if not args.include_video and any(c in VIDEO_EXTENSIONS for c in found):
+                            reason = "video (use --include-video to include)"
+                        elif allowed_ext and found and not (set(found) & allowed_ext):
+                            reason = ".%s not in --ext" % found[0]
+                        if reason:
+                            print("[%d/%d] skip  %-6s %s  [%s]"
+                                  % (index, len(targets), (found[0] if found else "?"),
+                                     activity.name, reason))
                             continue
 
                     result = fetcher.fetch(ref)
