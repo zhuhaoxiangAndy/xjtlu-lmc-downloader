@@ -37,6 +37,7 @@ from typing import Dict, Iterable, List, Optional
 
 from .crawler import FileRef
 from .http import HttpClient, HttpError, SessionExpired
+from .crawler import SECTION_SEP
 from .names import (
     LAYOUT_FLAT,
     LAYOUT_LINK,
@@ -233,7 +234,14 @@ class Fetcher:
           files-flat-> 章节/            （单文件活动直接放章节里）
           link-name -> 章节/            （文件名带活动标题）
         """
-        parts = [sanitize_name(ref.section)] if ref.section else []
+        # section 可能是嵌套路径（父周/子章节），按 / 拆成真正的多级目录；
+        # 否则 sanitize_name 会把分隔符当成非法字符删掉，两级名字粘在一起。
+        parts = []
+        if ref.section:
+            for piece in ref.section.split(SECTION_SEP):
+                cleaned = sanitize_name(piece)
+                if cleaned:
+                    parts.append(cleaned)
         if activity_dir_needed(ref.kind, file_count, self.layout):
             if ref.activity:
                 parts.append(sanitize_name(ref.activity))

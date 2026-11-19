@@ -186,6 +186,23 @@ def parse_outline(snapshot_bytes: bytes, course_id: str = "") -> CourseOutline:
     return parse_course_html(html, course_id=course_id)
 
 
+SECTION_SEP = "\x1f"
+
+
+def section_label(section) -> str:
+    """章节的完整路径名：父周/子章节，与网页层级一致。"""
+    names = []
+    node = section
+    while node is not None:
+        name = (getattr(node, "name", "") or "").strip()
+        if name:
+            names.append(name)
+        node = getattr(node, "parent", None)
+    names.reverse()
+    # 用不可见的单元分隔符连接父子章节：标题本身可能含 "/"
+    # （例如 "Week 10: File I/O, List, Set and Map"），用 "/" 会把它拆错。
+    return SECTION_SEP.join(names) if names else getattr(section, "name", "") or "Course"
+
 def _parse_with_build_dir_tree(snapshot_bytes: bytes,
                                course_id: str) -> Optional[CourseOutline]:
     """Use build-dir-tree when present; return ``None`` when unavailable."""
@@ -204,6 +221,9 @@ def _parse_with_build_dir_tree(snapshot_bytes: bytes,
         title=course.title or "",
     )
     for section in course.all_sections():
+        # 子章节（Lecture/Tutorial/Lab）必须带上父周名，否则 11 个 Week 的
+        # Lecture 会塌成同一个 section，活动全部落到错误的周里。
+        label = section_label(section)
         for activity in section.real_activities():
             modtype = activity.modtype or ""
             instance = str(activity.id or "")
@@ -211,7 +231,7 @@ def _parse_with_build_dir_tree(snapshot_bytes: bytes,
                 Activity(
                     name=activity.name,
                     modtype=modtype,
-                    section=section.name,
+                    section=label,
                     view_url=view_url(modtype, instance),
                     instance=instance,
                 )
@@ -278,8 +298,13 @@ def parse_course_html(html: str, course_id: str = "") -> CourseOutline:
     """Parse a Moodle course page without any third-party or sibling package.
 
     Sections are located by ``id="section-N"``, activities by
-    ``id="module-N"`` carrying a ``modtype_*`` class. An activity belongs to the
-    nearest preceding section, which is how Moodle nests them in the DOM.
+    ``id="module-N"`` carrying a ``modtype_*`` class.
+
+    Sub-sections (Lecture / Tutorial / Lab / References) are nested inside their
+    parent week's ``<li>``, so the parent-child relation has to come from tag
+    depth. Treating every section as a sibling — the previous behaviour — made
+    `Lecture` swallow the whole week: CSI101 collapsed from 11 weeks into 6
+    flat chapters and every activity landed under the wrong heading.
     """
     title = ""
     title_match = re.search(r"<title>(.*?)</title>", html, re.S | re.I)
@@ -295,28 +320,45 @@ def parse_course_html(html: str, course_id: str = "") -> CourseOutline:
         marks.append((match.start(), "module", match))
     marks.sort(key=lambda item: item[0])
 
-    names = {}
-    for match in _SECTION_NAME_RE.finditer(html):
-        names[match.start()] = _strip_tags(match.group(1))
+    # 用标签配对算出每个 section 的 DOM 深度，深度更大者为子章节
+    depths = _section_depths(html)
+
+    # 维护一个按深度排列的祖先栈：stack[d] 是深度为 d 的当前章节名
+    stack = []
 
     current_section = ""
     for offset, kind, match in marks:
         if kind == "section":
-            # Prefer data-sectionname on the <li>: delegated and empty
-            # sections render no on-page <h3>, and inferring from the next
-            # heading files their activities under the wrong week.
+            num = match.group(1)
+            # 1) data-sectionname（Moodle 新主题）
             attr = _SECTION_NAME_ATTR.search(match.group(0))
             label = _decode_entities(attr.group(1)) if attr else ""
-            for pos in sorted(names):
-                if label:
-                    break
-                if pos <= offset:
-                    continue
-                if _next_section_before(pos, marks, offset):
-                    break
-                label = names[pos]
-                break
-            current_section = label or ("Section %s" % match.group(1))
+            # 2) 该 li 内紧跟的 <h3 class="sectionname">（旧主题与快照）
+            if not label:
+                h3 = re.search(
+                    r'<h3[^>]*class="[^"]*sectionname[^"]*"[^>]*>(.*?)</h3>',
+                    html[offset:offset + 4000], re.S | re.I,
+                )
+                if h3:
+                    label = _strip_tags(h3.group(1))
+            if not label:
+                label = "Section %s" % num
+
+            depth = depths.get(offset, 0)
+            if depth <= 0:
+                # 顶层：清空栈后入栈
+                stack = [(depth, label)]
+            else:
+                # 弹出所有深度 >= 当前深度的祖先，剩下的最后一个就是父章节
+                while stack and stack[-1][0] >= depth:
+                    stack.pop()
+                stack.append((depth, label))
+
+            # 活动归属：父章节名 + 本子章节名，用 / 连接，与网页层级一致
+            if len(stack) > 1:
+                current_section = "/".join(name for _, name in stack)
+            else:
+                current_section = label
             continue
 
         instance = match.group(1)
@@ -351,6 +393,46 @@ def parse_course_html(html: str, course_id: str = "") -> CourseOutline:
 
     return outline
 
+
+
+
+_VOID_TAGS = frozenset(
+    "area base br col embed hr img input link meta param source track wbr".split()
+)
+
+
+def _section_depths(html: str) -> dict:
+    """每个 ``id="section-N"`` 出现位置的 DOM 嵌套深度。
+
+    Walks the tag stream once, keeping an element stack. The depth is the stack
+    size at the moment the section <li> opens, so a section nested inside
+    another section's <li> gets a strictly larger number.
+    """
+    depths = {}
+    stack = []
+    tag_re = re.compile(r"<(/?)([a-zA-Z][a-zA-Z0-9:-]*)((?:\"[^\"]*\"|'[^']*'|[^>\"'])*?)(/?)>")
+    section_re = re.compile(r'<li[^>]*\bid="section-(\d+)"', re.I)
+
+    pos = 0
+    while True:
+        m = tag_re.search(html, pos)
+        if not m:
+            break
+        pos = m.end()
+        closing, tag, attrs, self_close = m.group(1), m.group(2).lower(), m.group(3), m.group(4)
+        if tag in _VOID_TAGS or self_close:
+            continue
+        if closing:
+            for i in range(len(stack) - 1, -1, -1):
+                if stack[i] == tag:
+                    del stack[i:]
+                    break
+            continue
+        # 记录这个 <li> 之前刚被匹配到的 section 偏移
+        if tag == "li" and 'id="section-' in m.group(0):
+            depths[m.start()] = len(stack)
+        stack.append(tag)
+    return depths
 
 class Crawler:
     """Resolve activities into concrete :class:`FileRef` objects."""
